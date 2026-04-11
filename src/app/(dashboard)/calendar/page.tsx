@@ -32,26 +32,35 @@ interface DemoFollowUp {
 // ---------- ICS download ----------
 function downloadFollowUpICS(contactName: string, company: string, dueDate: Date, topics: string[], notes?: string | null) {
   const pad = (n: number) => String(n).padStart(2, '0')
+  const escape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+
   const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
   const nextDay = new Date(dueDate)
   nextDay.setDate(nextDay.getDate() + 1)
   const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
-  const descParts = [company, topics.length > 0 && `Temas: ${topics.join(', ')}`, notes].filter(Boolean)
-  const ics = [
+
+  const now = new Date()
+  const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`
+
+  const descParts = [company, topics.length > 0 && `Temas: ${topics.join(', ')}`, notes].filter(Boolean) as string[]
+  const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//Sphere CRM//ES',
     'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:sphere-${Date.now()}@sphere-crm`,
+    `DTSTAMP:${dtstamp}`,
     `DTSTART;VALUE=DATE:${dateStr}`,
     `DTEND;VALUE=DATE:${nextDayStr}`,
-    `SUMMARY:Seguimiento con ${contactName} (${company})`,
-    descParts.length > 0 ? `DESCRIPTION:${descParts.join('\\n')}` : '',
+    `SUMMARY:${escape(`Seguimiento con ${contactName} (${company})`)}`,
+    ...(descParts.length > 0 ? [`DESCRIPTION:${escape(descParts.join('\n'))}`] : []),
     'END:VEVENT',
     'END:VCALENDAR',
-  ].filter(Boolean).join('\r\n')
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+    '',
+  ]
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
