@@ -11,6 +11,7 @@ import {
   User,
   Building2,
   MessageSquare,
+  Download,
 } from 'lucide-react'
 import { cn, tierConfig, getInitials } from '@/lib/utils'
 import { ContactTier, FollowUpStatus } from '@/lib/types/database'
@@ -26,6 +27,37 @@ interface DemoFollowUp {
   status: FollowUpStatus
   notes: string | null
   suggestedTopics: string[]
+}
+
+// ---------- ICS download ----------
+function downloadFollowUpICS(contactName: string, company: string, dueDate: Date, topics: string[], notes?: string | null) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
+  const nextDay = new Date(dueDate)
+  nextDay.setDate(nextDay.getDate() + 1)
+  const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
+  const descParts = [company, topics.length > 0 && `Temas: ${topics.join(', ')}`, notes].filter(Boolean)
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Sphere CRM//ES',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:sphere-${Date.now()}@sphere-crm`,
+    `DTSTART;VALUE=DATE:${dateStr}`,
+    `DTEND;VALUE=DATE:${nextDayStr}`,
+    `SUMMARY:Seguimiento con ${contactName} (${company})`,
+    descParts.length > 0 ? `DESCRIPTION:${descParts.join('\\n')}` : '',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n')
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `seguimiento-${contactName.replace(/\s+/g, '-').toLowerCase()}.ics`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ---------- Demo data helpers ----------
@@ -389,7 +421,7 @@ export default function CalendarPage() {
 
                   {/* Actions */}
                   {fu.status === 'pending' || fu.status === 'overdue' ? (
-                    <div className="flex gap-2 pl-12 mt-2">
+                    <div className="flex flex-wrap gap-2 pl-12 mt-2">
                       <button
                         onClick={() => handleComplete(fu.id)}
                         className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
@@ -407,6 +439,13 @@ export default function CalendarPage() {
                         className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 transition-colors border border-zinc-500/20"
                       >
                         <SkipForward className="w-3 h-3" /> Saltar
+                      </button>
+                      <button
+                        onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
+                        title="Descargar cita (.ics)"
+                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors border border-indigo-500/20"
+                      >
+                        <Download className="w-3 h-3" /> Guardar en calendario
                       </button>
                     </div>
                   ) : (
@@ -482,6 +521,13 @@ export default function CalendarPage() {
                           </div>
                         )}
                       </div>
+                      <button
+                        onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
+                        title="Descargar cita (.ics)"
+                        className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
