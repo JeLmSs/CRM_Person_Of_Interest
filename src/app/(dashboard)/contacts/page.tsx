@@ -27,7 +27,7 @@ const frequencyOptions = [
 ]
 
 export default function ContactsPage() {
-  const [contacts, setContacts] = useState<Contact[]>(demoContacts)
+  const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState<ContactTier | 'all'>('all')
@@ -40,11 +40,18 @@ export default function ContactsPage() {
 
   useEffect(() => {
     const fetchContacts = async () => {
+      const isDemoMode = localStorage.getItem('demoMode') === 'true'
       try {
         const supabase = createClient()
         const { data } = await supabase.from('contacts').select('*').order('created_at', { ascending: false })
-        if (data && data.length > 0) setContacts(data)
-      } catch { /* use demo */ }
+        if (data && data.length > 0) {
+          setContacts(data)
+        } else if (isDemoMode) {
+          setContacts(demoContacts)
+        }
+      } catch {
+        if (isDemoMode) setContacts(demoContacts)
+      }
       setLoading(false)
     }
     fetchContacts()

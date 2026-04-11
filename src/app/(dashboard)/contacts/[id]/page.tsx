@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download } from 'lucide-react'
 import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
 import { ContactTier, InteractionType, InteractionSentiment } from '@/lib/types/database'
 
@@ -10,6 +10,36 @@ const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada',
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
 const sentimentOpts = [{ v:'very_positive', l:'Excelente', c:'bg-green-500/20 text-green-400' },{ v:'positive', l:'Bien', c:'bg-emerald-500/20 text-emerald-400' },{ v:'neutral', l:'Neutral', c:'bg-zinc-500/20 text-zinc-400' },{ v:'negative', l:'Mal', c:'bg-orange-500/20 text-orange-400' }]
 const outcomeTypes = [{ v:'job_lead', l:'Oportunidad laboral' },{ v:'introduction', l:'Presentación' },{ v:'advice', l:'Consejo' },{ v:'collaboration', l:'Colaboración' },{ v:'referral', l:'Referencia' },{ v:'information', l:'Información' },{ v:'opportunity', l:'Oportunidad' }]
+
+function downloadFollowUpICS(contactName: string, company: string, jobTitle: string, dueDate: Date, notes?: string | null) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
+  const nextDay = new Date(dueDate)
+  nextDay.setDate(nextDay.getDate() + 1)
+  const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
+  const description = [jobTitle && `${jobTitle} · ${company}`, notes].filter(Boolean).join('\\n')
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Sphere CRM//ES',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:sphere-${Date.now()}@sphere-crm`,
+    `DTSTART;VALUE=DATE:${dateStr}`,
+    `DTEND;VALUE=DATE:${nextDayStr}`,
+    `SUMMARY:Seguimiento con ${contactName} (${company})`,
+    description ? `DESCRIPTION:${description}` : '',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n')
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `seguimiento-${contactName.replace(/\s+/g, '-').toLowerCase()}.ics`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const demo = {
   contact: { id:'1', first_name:'Carlos', last_name:'Mendoza', email:'carlos@iberdrola.com', phone:'+34 612 345 678', company:'Iberdrola', job_title:'Director de Innovación', tier:'S' as ContactTier, relationship_score:92, city:'Madrid', country:'España', linkedin_url:'https://linkedin.com/in/carlosmendoza', follow_up_frequency:'weekly', next_follow_up_date: new Date(Date.now()+2*86400000).toISOString(), notes:'Contacto clave en energía renovable. Interesado en transformación digital y sostenibilidad.' },
@@ -74,7 +104,16 @@ export default function ContactDetailPage() {
             {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-zinc-300 hover:text-blue-400 transition-colors"><ExternalLink className="w-4 h-4 text-zinc-500" />LinkedIn</a>}
             <div className="flex items-center gap-2 text-zinc-400"><MapPin className="w-4 h-4 text-zinc-500" />{c.city}, {c.country}</div>
             <div className="flex items-center gap-2 text-zinc-400"><Clock className="w-4 h-4 text-zinc-500" />Seguimiento: {c.follow_up_frequency === 'weekly' ? 'Semanal' : 'Mensual'}</div>
-            <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {new Date(c.next_follow_up_date).toLocaleDateString('es-ES')}</div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {new Date(c.next_follow_up_date).toLocaleDateString('es-ES')}</div>
+              <button
+                onClick={() => downloadFollowUpICS(`${c.first_name} ${c.last_name}`, c.company, c.job_title, new Date(c.next_follow_up_date), c.notes)}
+                title="Descargar cita (.ics)"
+                className="p-1 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
           <div className="flex gap-2 mt-6">
             {[{ icon: Phone, label: 'Llamar' }, { icon: Mail, label: 'Email' }, { icon: ExternalLink, label: 'LinkedIn' }].map(a => (
