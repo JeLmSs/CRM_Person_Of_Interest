@@ -35,13 +35,14 @@ const sentimentColors: Record<string, string> = {
 }
 
 export default function DashboardPage() {
-  const [contacts, setContacts] = useState<typeof demoContacts>(demoContacts)
-  const [interactions, setInteractions] = useState<typeof demoInteractions>(demoInteractions)
+  const [contacts, setContacts] = useState<typeof demoContacts>([])
+  const [interactions, setInteractions] = useState<typeof demoInteractions>([])
   const [loading, setLoading] = useState(true)
   const [userName, setUserName] = useState('Profesional')
 
   useEffect(() => {
     const fetchData = async () => {
+      const isDemoMode = localStorage.getItem('demoMode') === 'true'
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
@@ -50,7 +51,11 @@ export default function DashboardPage() {
           if (profile?.full_name) setUserName(profile.full_name.split(' ')[0])
 
           const { data: dbContacts } = await supabase.from('contacts').select('*').eq('status', 'active').order('tier', { ascending: true })
-          if (dbContacts && dbContacts.length > 0) setContacts(dbContacts as typeof demoContacts)
+          if (dbContacts && dbContacts.length > 0) {
+            setContacts(dbContacts as typeof demoContacts)
+          } else if (isDemoMode) {
+            setContacts(demoContacts)
+          }
 
           const { data: dbInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false }).limit(5)
           if (dbInteractions && dbInteractions.length > 0) {
@@ -59,9 +64,19 @@ export default function DashboardPage() {
               return { ...i, _contactName: contact ? `${contact.first_name} ${contact.last_name || ''}`.trim() : 'Contacto' }
             }))
             setInteractions(enriched as typeof demoInteractions)
+          } else if (isDemoMode) {
+            setInteractions(demoInteractions)
           }
+        } else if (isDemoMode) {
+          setContacts(demoContacts)
+          setInteractions(demoInteractions)
         }
-      } catch { /* use demo data */ }
+      } catch {
+        if (isDemoMode) {
+          setContacts(demoContacts)
+          setInteractions(demoInteractions)
+        }
+      }
       setLoading(false)
     }
     fetchData()
@@ -75,7 +90,7 @@ export default function DashboardPage() {
     const d = getDaysUntilFollowUp(c.next_follow_up_date)
     return d !== null && d < 0
   }).length
-  const avgScore = Math.round(contacts.reduce((sum, c) => sum + c.relationship_score, 0) / contacts.length)
+  const avgScore = contacts.length > 0 ? Math.round(contacts.reduce((sum, c) => sum + c.relationship_score, 0) / contacts.length) : 0
 
   const urgentFollowUps = [...contacts]
     .filter(c => c.next_follow_up_date)

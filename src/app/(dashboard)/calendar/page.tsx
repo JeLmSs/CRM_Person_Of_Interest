@@ -142,10 +142,12 @@ export default function CalendarPage() {
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<Date>(today)
 
-  // Simulate loading
+  // Load follow-ups (demo data only if flag is enabled)
   useEffect(() => {
     const t = setTimeout(() => {
-      setFollowUps(buildDemoData())
+      if (localStorage.getItem('demoMode') === 'true') {
+        setFollowUps(buildDemoData())
+      }
       setLoading(false)
     }, 600)
     return () => clearTimeout(t)
