@@ -56,6 +56,18 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
+// Generate consistent color for contact ID
+function getContactColor(contactId: string): string {
+  const colors = [
+    'bg-red-400', 'bg-orange-400', 'bg-amber-400', 'bg-yellow-400',
+    'bg-lime-400', 'bg-emerald-400', 'bg-teal-400', 'bg-cyan-400',
+    'bg-blue-400', 'bg-indigo-400', 'bg-violet-400', 'bg-purple-400',
+    'bg-pink-400', 'bg-rose-400'
+  ]
+  const hash = contactId.charCodeAt(0) + contactId.charCodeAt(contactId.length - 1)
+  return colors[hash % colors.length]
+}
+
 export default function CalendarPage() {
   const today = new Date()
   const [loading, setLoading] = useState(true)
@@ -154,53 +166,6 @@ export default function CalendarPage() {
 
   const getContactInfo = (contactId: string) => contacts.find(c => c.id === contactId)
 
-  const handleTestCreateInteraction = async () => {
-    try {
-      if (contacts.length === 0) {
-        alert('No hay contactos disponibles para probar')
-        return
-      }
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('No hay sesión')
-        return
-      }
-
-      const testPayload = {
-        user_id: user.id,
-        contact_id: contacts[0].id,
-        type: 'meeting' as const,
-        title: 'TEST - ' + new Date().toISOString(),
-        date: dateKey(today),
-        sentiment: 'neutral' as const,
-        description: 'Test interaction from debug panel',
-        duration_minutes: 30
-      }
-
-      console.log('Test: Attempting to insert:', testPayload)
-      const { data, error } = await supabase.from('interactions').insert([testPayload])
-
-      if (error) {
-        console.error('Test: Insert error:', error)
-        alert('ERROR AL GUARDAR:\n\nCódigo: ' + error.code + '\nMensaje: ' + error.message + '\n\nRevisa la consola para más detalles')
-      } else {
-        console.log('Test: Insert success:', data)
-        // Reload interactions
-        const { data: newInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false })
-        console.log('Test: Reloaded interactions:', newInteractions?.length, newInteractions)
-        if (newInteractions) {
-          setInteractions(newInteractions as CalendarInteraction[])
-          console.log('Test: State updated with new interactions')
-        }
-        alert('SUCCESS! La interacción se guardó. Mira arriba en el Calendario ahora.')
-      }
-    } catch (e) {
-      console.error('Test: Exception:', e)
-      alert('EXCEPCIÓN: ' + (e instanceof Error ? e.message : String(e)))
-    }
-  }
-
   if (loading) return <div className="animate-pulse space-y-6"><div className="h-96 bg-zinc-800/50 rounded-xl" /></div>
 
   return (
@@ -250,8 +215,8 @@ export default function CalendarPage() {
                   <span className="text-xs">{date.getDate()}</span>
                   {(ints.length > 0 || fus.length > 0) && (
                     <div className="flex gap-0.5">
-                      {fus.slice(0, 2).map((_, i) => <span key={`fu${i}`} className="w-1.5 h-1.5 rounded-full bg-amber-400" />)}
-                      {ints.slice(0, 2).map((_, i) => <span key={`int${i}`} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
+                      {ints.slice(0, 2).map((i, idx) => <span key={`int${idx}`} className={cn('w-1.5 h-1.5 rounded-full', getContactColor(i.contact_id))} />)}
+                      {fus.slice(0, 2).map((f, idx) => <span key={`fu${idx}`} className={cn('w-1.5 h-1.5 rounded-full border border-current opacity-60', getContactColor(f.contact_id || ''))} />)}
                     </div>
                   )}
                 </button>
@@ -385,16 +350,6 @@ export default function CalendarPage() {
         }}
       />
 
-      {/* Debug info */}
-      <div className="bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-4 space-y-2">
-        <div className="text-xs text-zinc-400 font-mono">
-          <p>Contactos={contacts.length} | Interacciones={interactions.length} | Seguimientos={followUps.length}</p>
-          {interactions.length > 0 && <p>Primera interacción: {interactions[0].date} - {interactions[0].title}</p>}
-        </div>
-        <button onClick={handleTestCreateInteraction} className="w-full px-3 py-2 text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium">
-          🧪 TEST: Crear interacción de prueba
-        </button>
-      </div>
     </div>
   )
 }
