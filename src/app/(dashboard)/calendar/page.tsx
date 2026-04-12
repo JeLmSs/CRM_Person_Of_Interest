@@ -357,7 +357,25 @@ export default function CalendarPage() {
         )}
       </div>
 
-      <InteractionModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInteraction(null) }} contacts={contacts} contactId={editingInteraction?.contact_id} defaultDate={editingInteraction?.date || dateKey(selectedDate)} existing={editingInteraction} onSaved={() => { setShowModal(false); setEditingInteraction(null) }} />
+      <InteractionModal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setEditingInteraction(null) }}
+        contacts={contacts}
+        contactId={editingInteraction?.contact_id}
+        defaultDate={editingInteraction?.date || dateKey(selectedDate)}
+        existing={editingInteraction}
+        onSaved={async () => {
+          // Reload interactions after save
+          const supabase = createClient()
+          const { data: newInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false })
+          if (newInteractions) {
+            console.log('Calendar: Reloaded interactions after save:', newInteractions.length)
+            setInteractions(newInteractions as CalendarInteraction[])
+          }
+          setShowModal(false)
+          setEditingInteraction(null)
+        }}
+      />
 
       {/* Debug info */}
       <div className="bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-4 space-y-2">
