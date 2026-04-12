@@ -140,6 +140,49 @@ export default function CalendarPage() {
 
   const getContactInfo = (contactId: string) => contacts.find(c => c.id === contactId)
 
+  const handleTestCreateInteraction = async () => {
+    try {
+      if (contacts.length === 0) {
+        alert('No hay contactos disponibles para probar')
+        return
+      }
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('No hay sesión')
+        return
+      }
+
+      const testPayload = {
+        user_id: user.id,
+        contact_id: contacts[0].id,
+        type: 'meeting' as const,
+        title: 'TEST - ' + new Date().toISOString(),
+        date: dateKey(today),
+        sentiment: 'neutral' as const,
+        description: 'Test interaction from debug panel',
+        duration_minutes: 30
+      }
+
+      console.log('Test: Attempting to insert:', testPayload)
+      const { data, error } = await supabase.from('interactions').insert([testPayload])
+
+      if (error) {
+        console.error('Test: Insert error:', error)
+        alert('ERROR AL GUARDAR:\n\nCódigo: ' + error.code + '\nMensaje: ' + error.message + '\n\nRevisa la consola para más detalles')
+      } else {
+        console.log('Test: Insert success:', data)
+        alert('SUCCESS! La interacción se guardó. Recarga la página para verla en el calendario.')
+        // Reload interactions
+        const { data: newInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false })
+        if (newInteractions) setInteractions(newInteractions as CalendarInteraction[])
+      }
+    } catch (e) {
+      console.error('Test: Exception:', e)
+      alert('EXCEPCIÓN: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   if (loading) return <div className="animate-pulse space-y-6"><div className="h-96 bg-zinc-800/50 rounded-xl" /></div>
 
   return (
@@ -307,9 +350,14 @@ export default function CalendarPage() {
       <InteractionModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInteraction(null) }} contacts={contacts} contactId={editingInteraction?.contact_id} defaultDate={editingInteraction?.date || dateKey(selectedDate)} existing={editingInteraction} onSaved={() => { setShowModal(false); setEditingInteraction(null) }} />
 
       {/* Debug info */}
-      <div className="bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-4 text-xs text-zinc-400 font-mono">
-        <p>Debug: Contacts={contacts.length} | Interactions={interactions.length} | FollowUps={followUps.length}</p>
-        {interactions.length > 0 && <p>First interaction: {interactions[0].date} - {interactions[0].title}</p>}
+      <div className="bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-4 space-y-2">
+        <div className="text-xs text-zinc-400 font-mono">
+          <p>Contactos={contacts.length} | Interacciones={interactions.length} | Seguimientos={followUps.length}</p>
+          {interactions.length > 0 && <p>Primera interacción: {interactions[0].date} - {interactions[0].title}</p>}
+        </div>
+        <button onClick={handleTestCreateInteraction} className="w-full px-3 py-2 text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium">
+          🧪 TEST: Crear interacción de prueba
+        </button>
       </div>
     </div>
   )
