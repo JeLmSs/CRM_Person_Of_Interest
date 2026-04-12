@@ -254,6 +254,16 @@ export default function CalendarPage() {
   // Parse YYYY-MM-DD as local date
   function parseLocalDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
 
+  // Match follow-up with interaction by contact_id + date proximity
+  function findLinkedInteraction(fu: DemoFollowUp) {
+    return interactions.find(i => {
+      if (i.contact_id !== fu.contact_id) return false
+      const iDate = parseLocalDate(i.date)
+      // Same day or within 1 day
+      return Math.abs(iDate.getTime() - fu.dueDate.getTime()) <= 86400000
+    })
+  }
+
   // Interactions indexed by date
   const interactionsByDate = useMemo(() => {
     const map: Record<string, any[]> = {}
@@ -303,13 +313,17 @@ export default function CalendarPage() {
     end.setHours(23, 59, 59, 999)
     return followUps
       .filter((fu) => fu.dueDate >= start && fu.dueDate <= end && fu.status !== 'completed' && fu.status !== 'skipped')
+      .map((fu) => ({
+        ...fu,
+        linkedInteraction: findLinkedInteraction(fu)
+      }))
       .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-  }, [followUps, today])
+  }, [followUps, today, interactions])
 
   // Group upcoming by day
   const upcomingGrouped = useMemo(() => {
-    const groups: { date: Date; items: DemoFollowUp[] }[] = []
-    const map = new Map<string, DemoFollowUp[]>()
+    const groups: { date: Date; items: (DemoFollowUp & { linkedInteraction?: any })[] }[] = []
+    const map = new Map<string, (DemoFollowUp & { linkedInteraction?: any })[]>()
     upcoming7.forEach((fu) => {
       const key = fu.dueDate.toDateString()
       if (!map.has(key)) map.set(key, [])
@@ -480,11 +494,13 @@ export default function CalendarPage() {
                   </div>
                 </div>
               ))}
-              {selectedFollowUps.map((fu) => (
+              {selectedFollowUps.map((fu) => {
+                const linkedInteraction = findLinkedInteraction(fu)
+                return (
                 <div
                   key={fu.id}
                   className={cn(
-                    'rounded-lg border p-3 transition-all duration-300',
+                    'rounded-lg border p-3 transition-all duration-300 relative',
                     fu.status === 'completed'
                       ? 'bg-emerald-900/10 border-emerald-800/30 opacity-60'
                       : fu.status === 'skipped'
@@ -492,6 +508,19 @@ export default function CalendarPage() {
                         : 'bg-zinc-900/50 border-zinc-800/50',
                   )}
                 >
+                  {/* Indicator badge */}
+                  {(fu.status === 'pending' || fu.status === 'overdue') && (
+                    linkedInteraction ? (
+                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      </div>
+                    ) : (
+                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/40">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                      </div>
+                    )
+                  )}
+
                   {/* Contact info */}
                   <div className="flex items-start gap-3 mb-2">
                     <div className={cn(
@@ -548,12 +577,14 @@ export default function CalendarPage() {
                       >
                         <SkipForward className="w-3 h-3" /> Saltar
                       </button>
-                      <button
-                        onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
-                      >
-                        <Plus className="w-3 h-3" /> Planificar interacción
-                      </button>
+                      {!linkedInteraction && (
+                        <button
+                          onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
+                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
+                        >
+                          <Plus className="w-3 h-3" /> Crear interacción
+                        </button>
+                      )}
                       <button
                         onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
                         title="Descargar cita (.ics)"
@@ -573,7 +604,9 @@ export default function CalendarPage() {
                     </div>
                   )}
                 </div>
-              ))}
+              )
+            })}
+
             </div>
           )}
         </div>
@@ -623,8 +656,19 @@ export default function CalendarPage() {
                   {group.items.map((fu) => (
                     <div
                       key={fu.id}
-                      className="flex items-start gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/40 p-3 hover:border-zinc-700/60 transition-colors"
+                      className="flex items-start gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/40 p-3 hover:border-zinc-700/60 transition-colors relative"
                     >
+                      {/* Indicator badge */}
+                      {fu.linkedInteraction ? (
+                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40" title="Interacción registrada">
+                          <Check className="w-2.5 h-2.5 text-emerald-400" />
+                        </div>
+                      ) : (
+                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/40" title="Sin interacción registrada">
+                          <Clock className="w-2.5 h-2.5 text-amber-400" />
+                        </div>
+                      )}
+
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
                         tierConfig[fu.tier].bgColor,
@@ -659,13 +703,24 @@ export default function CalendarPage() {
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
-                        title="Descargar cita (.ics)"
-                        className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex gap-1 shrink-0">
+                        {!fu.linkedInteraction && (
+                          <button
+                            onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
+                            className="p-1.5 rounded-md hover:bg-violet-800 text-violet-500 hover:text-violet-300 transition-colors"
+                            title="Crear interacción"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
+                          title="Descargar cita (.ics)"
+                          className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
