@@ -12,17 +12,27 @@ const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'
 const sentimentOpts = [{ v:'very_positive', l:'Excelente', c:'bg-green-500/20 text-green-400' },{ v:'positive', l:'Bien', c:'bg-emerald-500/20 text-emerald-400' },{ v:'neutral', l:'Neutral', c:'bg-zinc-500/20 text-zinc-400' },{ v:'negative', l:'Mal', c:'bg-orange-500/20 text-orange-400' }]
 const outcomeTypes = [{ v:'job_lead', l:'Oportunidad laboral' },{ v:'introduction', l:'Presentación' },{ v:'advice', l:'Consejo' },{ v:'collaboration', l:'Colaboración' },{ v:'referral', l:'Referencia' },{ v:'information', l:'Información' },{ v:'opportunity', l:'Oportunidad' }]
 
-function downloadFollowUpICS(contactName: string, company: string, jobTitle: string, dueDate: Date, notes?: string | null) {
+function downloadFollowUpICS(contactName: string, company: string, jobTitle: string, dueDate: Date, notes?: string | null, startTime?: string, endTime?: string) {
   const pad = (n: number) => String(n).padStart(2, '0')
   const escape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
 
-  const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
-  const nextDay = new Date(dueDate)
-  nextDay.setDate(nextDay.getDate() + 1)
-  const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
-
   const now = new Date()
   const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`
+
+  let dtstart: string, dtend: string
+  if (startTime && endTime) {
+    const [sh, sm] = startTime.split(':')
+    const [eh, em] = endTime.split(':')
+    dtstart = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}T${sh}${sm}00`
+    dtend = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}T${eh}${em}00`
+  } else {
+    const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
+    const nextDay = new Date(dueDate)
+    nextDay.setDate(nextDay.getDate() + 1)
+    const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
+    dtstart = `VALUE=DATE:${dateStr}`
+    dtend = `VALUE=DATE:${nextDayStr}`
+  }
 
   const descParts = [jobTitle && `${jobTitle} · ${company}`, notes].filter(Boolean) as string[]
   const lines = [
@@ -34,8 +44,8 @@ function downloadFollowUpICS(contactName: string, company: string, jobTitle: str
     'BEGIN:VEVENT',
     `UID:sphere-${Date.now()}@sphere-crm`,
     `DTSTAMP:${dtstamp}`,
-    `DTSTART;VALUE=DATE:${dateStr}`,
-    `DTEND;VALUE=DATE:${nextDayStr}`,
+    `DTSTART;${dtstart.includes('VALUE') ? '' : 'TZID=Europe/Madrid:'}${dtstart}`,
+    `DTEND;${dtend.includes('VALUE') ? '' : 'TZID=Europe/Madrid:'}${dtend}`,
     `SUMMARY:${escape(`Seguimiento con ${contactName} (${company})`)}`,
     ...(descParts.length > 0 ? [`DESCRIPTION:${escape(descParts.join('\n'))}`] : []),
     'END:VEVENT',
@@ -80,10 +90,13 @@ export default function ContactDetailPage() {
   const [outcomes, setOutcomes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
+  const [notesSaved, setNotesSaved] = useState(false)
   const [showAddInterest, setShowAddInterest] = useState(false)
   const [newInterestName, setNewInterestName] = useState('')
   const [newInterestPositive, setNewInterestPositive] = useState(true)
-  const [newInteraction, setNewInteraction] = useState({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30 })
+  const [savingInteraction, setSavingInteraction] = useState(false)
+  const [savingOutcome, setSavingOutcome] = useState(false)
+  const [newInteraction, setNewInteraction] = useState({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30, startTime: '09:00', endTime: '10:00' })
   const [newOutcome, setNewOutcome] = useState({ type:'introduction', title:'', description:'', rating:3 })
 
   useEffect(() => {
@@ -135,9 +148,9 @@ export default function ContactDetailPage() {
       <Link href="/contacts" className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white mb-4 transition-colors">
         <ArrowLeft className="w-4 h-4" /> Volver a contactos
       </Link>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Profile Card */}
-        <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-6">
+        <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6">
           <div className="flex flex-col items-center text-center mb-6">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold ${tierConfig[c.tier].bgColor} ${tierConfig[c.tier].color} border-2 mb-3`}>
               {getInitials(c.first_name, c.last_name)}
@@ -165,7 +178,7 @@ export default function ContactDetailPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {c.next_follow_up_date ? new Date(c.next_follow_up_date).toLocaleDateString('es-ES') : 'No definido'}</div>
               {c.next_follow_up_date && <button
-                onClick={() => downloadFollowUpICS(`${c.first_name} ${c.last_name}`, c.company || '', c.job_title || '', new Date(c.next_follow_up_date!), c.notes)}
+                onClick={() => downloadFollowUpICS(`${c.first_name} ${c.last_name}`, c.company || '', c.job_title || '', new Date(c.next_follow_up_date!), c.notes, '09:00', '10:00')}
                 title="Descargar cita (.ics)"
                 className="p-1 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors"
               >
@@ -301,9 +314,17 @@ export default function ContactDetailPage() {
               <button onClick={async () => {
                 try {
                   const supabase = createClient()
-                  await supabase.from('contacts').update({ notes }).eq('id', c.id)
-                } catch (e) { console.error(e) }
-              }} className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">Guardar notas</button>
+                  const { error } = await supabase.from('contacts').update({ notes }).eq('id', c.id)
+                  if (error) throw error
+                  setNotesSaved(true)
+                  setTimeout(() => setNotesSaved(false), 2000)
+                } catch (e) {
+                  console.error(e)
+                  alert('Error al guardar notas')
+                }
+              }} className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
+                {notesSaved ? '✓ Guardado' : 'Guardar notas'}
+              </button>
             </div>
           )}
         </div>
@@ -345,6 +366,23 @@ export default function ContactDetailPage() {
                   </select>
                 </div>
               </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora inicio</label>
+                  <input type="time" value={(newInteraction as any).startTime || '09:00'} onChange={e => setNewInteraction(p => ({ ...p, startTime: e.target.value } as any))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora fin</label>
+                  <input type="time" value={(newInteraction as any).endTime || '10:00'} onChange={e => setNewInteraction(p => ({ ...p, endTime: e.target.value } as any))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Duración (min)</label>
+                  <input type="number" value={newInteraction.duration_minutes} onChange={e => setNewInteraction(p => ({ ...p, duration_minutes: parseInt(e.target.value) || 30 }))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
                 <textarea value={newInteraction.description} onChange={e => setNewInteraction(p => ({ ...p, description: e.target.value }))} rows={3}
@@ -354,18 +392,27 @@ export default function ContactDetailPage() {
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowInteractionModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={async () => {
+                if (!newInteraction.title.trim()) return alert('Título requerido')
+                setSavingInteraction(true)
                 try {
                   const supabase = createClient()
-                  const { data } = await supabase.from('interactions').insert({
+                  const { error } = await supabase.from('interactions').insert({
                     contact_id: c.id, type: newInteraction.type, title: newInteraction.title,
                     date: newInteraction.date, sentiment: newInteraction.sentiment,
                     description: newInteraction.description, duration_minutes: newInteraction.duration_minutes
-                  }).select().single()
-                  if (data) setInteractions(prev => [data, ...prev])
+                  })
+                  if (error) throw error
                   setShowInteractionModal(false)
-                  setNewInteraction({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30 })
-                } catch (e) { console.error(e) }
-              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+                  setNewInteraction({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30, startTime: '09:00', endTime: '10:00' })
+                  const { data } = await supabase.from('interactions').select('*').eq('contact_id', c.id).order('date', { ascending: false })
+                  if (data) setInteractions(data)
+                } catch (e) {
+                  console.error(e)
+                  alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
+                } finally {
+                  setSavingInteraction(false)
+                }
+              }} disabled={savingInteraction} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{savingInteraction ? 'Guardando...' : 'Guardar'}</button>
             </div>
           </div>
         </div>
@@ -401,17 +448,26 @@ export default function ContactDetailPage() {
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowOutcomeModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={async () => {
+                if (!newOutcome.title.trim()) return alert('Título requerido')
+                setSavingOutcome(true)
                 try {
                   const supabase = createClient()
-                  const { data } = await supabase.from('outcomes').insert({
+                  const { error } = await supabase.from('outcomes').insert({
                     contact_id: c.id, type: newOutcome.type, title: newOutcome.title,
                     description: newOutcome.description, rating: newOutcome.rating, date: new Date().toISOString()
-                  }).select().single()
-                  if (data) setOutcomes(prev => [data, ...prev])
+                  })
+                  if (error) throw error
                   setShowOutcomeModal(false)
                   setNewOutcome({ type:'introduction', title:'', description:'', rating:3 })
-                } catch (e) { console.error(e) }
-              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+                  const { data } = await supabase.from('outcomes').select('*').eq('contact_id', c.id).order('date', { ascending: false })
+                  if (data) setOutcomes(data)
+                } catch (e) {
+                  console.error(e)
+                  alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
+                } finally {
+                  setSavingOutcome(false)
+                }
+              }} disabled={savingOutcome} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{savingOutcome ? 'Guardando...' : 'Guardar'}</button>
             </div>
           </div>
         </div>

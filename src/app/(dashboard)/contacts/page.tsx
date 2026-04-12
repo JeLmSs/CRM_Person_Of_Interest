@@ -123,31 +123,31 @@ export default function ContactsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
+      <div className="space-y-3 md:space-y-0 md:flex md:flex-wrap md:items-center md:gap-3">
+        <div className="relative flex-1 min-w-full md:min-w-[200px] md:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input type="text" placeholder="Buscar por nombre, empresa, email..." value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50" />
         </div>
         <select value={tierFilter} onChange={e => setTierFilter(e.target.value as ContactTier | 'all')}
-          className="px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+          className="w-full md:w-auto px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
           <option value="all">Todos los tiers</option>
           {tierOrder.map(t => <option key={t} value={t}>Tier {t}</option>)}
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as ContactStatus | 'all')}
-          className="px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+          className="w-full md:w-auto px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
           <option value="all">Todos</option>
           <option value="active">Activos</option>
           <option value="dormant">Dormidos</option>
           <option value="archived">Archivados</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
-          className="px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+          className="w-full md:w-auto px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
           <option value="tier">Ordenar: Tier</option>
           <option value="name">Ordenar: Nombre</option>
           <option value="score">Ordenar: Score</option>
-          <option value="last_contact">Ordenar: Último contacto</option>
-          <option value="next_followup">Ordenar: Próximo seguimiento</option>
+          <option value="last_contact">Último contacto</option>
+          <option value="next_followup">Próximo seguimiento</option>
         </select>
         <div className="flex items-center border border-zinc-800 rounded-lg overflow-hidden">
           <button onClick={() => setViewMode('grid')} className={`p-2 ${viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'bg-zinc-900/50 text-zinc-400 hover:text-white'} transition-colors`}>
@@ -265,7 +265,7 @@ export default function ContactsPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-white">Nuevo contacto</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
