@@ -1,446 +1,173 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import {
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
-  Check,
-  Clock,
-  SkipForward,
-  User,
-  Building2,
-  MessageSquare,
-  Download,
-  Plus,
-} from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Plus, Edit2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn, tierConfig, getInitials } from '@/lib/utils'
-import { ContactTier, FollowUpStatus, Contact } from '@/lib/types/database'
+import { Contact } from '@/lib/types/database'
 import InteractionModal from '@/components/interaction-modal'
 
-// ---------- Types ----------
-interface DemoFollowUp {
+interface CalendarInteraction {
   id: string
-  contact_id?: string
-  contactName: string
-  contactLastName: string
-  company: string
-  tier: ContactTier
-  dueDate: Date
-  status: FollowUpStatus
+  contact_id: string
+  type: string
+  title: string
+  description: string | null
+  sentiment: string
+  date: string
+  duration_minutes: number | null
+}
+
+interface CalendarFollowUp {
+  id: string
+  contact_id: string
+  due_date: string
+  status: string
   notes: string | null
-  suggestedTopics: string[]
+  suggested_topics: string[] | null
+  contact?: Contact
 }
 
-// ---------- ICS download ----------
-function downloadFollowUpICS(contactName: string, company: string, dueDate: Date, topics: string[], notes?: string | null) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const escape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
-
-  const dateStr = `${dueDate.getFullYear()}${pad(dueDate.getMonth() + 1)}${pad(dueDate.getDate())}`
-  const nextDay = new Date(dueDate)
-  nextDay.setDate(nextDay.getDate() + 1)
-  const nextDayStr = `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`
-
-  const now = new Date()
-  const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`
-
-  const descParts = [company, topics.length > 0 && `Temas: ${topics.join(', ')}`, notes].filter(Boolean) as string[]
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Sphere CRM//ES',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    'BEGIN:VEVENT',
-    `UID:sphere-${Date.now()}@sphere-crm`,
-    `DTSTAMP:${dtstamp}`,
-    `DTSTART;VALUE=DATE:${dateStr}`,
-    `DTEND;VALUE=DATE:${nextDayStr}`,
-    `SUMMARY:${escape(`Seguimiento con ${contactName} (${company})`)}`,
-    ...(descParts.length > 0 ? [`DESCRIPTION:${escape(descParts.join('\n'))}`] : []),
-    'END:VEVENT',
-    'END:VCALENDAR',
-    '',
-  ]
-  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `seguimiento-${contactName.replace(/\s+/g, '-').toLowerCase()}.ics`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-// ---------- Demo data helpers ----------
-function buildDemoData(): DemoFollowUp[] {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth()
-
-  const contacts: Omit<DemoFollowUp, 'id' | 'dueDate' | 'status' | 'notes' | 'suggestedTopics'>[] = [
-    { contactName: 'Carlos', contactLastName: 'Mendoza', company: 'TechVentures MX', tier: 'S' },
-    { contactName: 'Ana', contactLastName: 'Gutierrez', company: 'Fintech Solutions', tier: 'A' },
-    { contactName: 'Roberto', contactLastName: 'Salinas', company: 'Global Consulting', tier: 'B' },
-    { contactName: 'Maria', contactLastName: 'Torres', company: 'StartupHub', tier: 'S' },
-    { contactName: 'Javier', contactLastName: 'Ruiz', company: 'DataSync Labs', tier: 'A' },
-    { contactName: 'Lucia', contactLastName: 'Fernandez', company: 'Creative Agency', tier: 'C' },
-    { contactName: 'Diego', contactLastName: 'Herrera', company: 'Blockchain MX', tier: 'B' },
-    { contactName: 'Sofia', contactLastName: 'Castillo', company: 'EduTech', tier: 'A' },
-    { contactName: 'Pablo', contactLastName: 'Navarro', company: 'CloudFirst', tier: 'C' },
-    { contactName: 'Elena', contactLastName: 'Morales', company: 'HealthPlus', tier: 'D' },
-  ]
-
-  const topics = [
-    ['Proyecto de IA', 'Revisión trimestral'],
-    ['Propuesta de inversión', 'Due diligence'],
-    ['Actualización de contrato', 'Networking event'],
-    ['Demo de producto', 'Feedback sobre MVP'],
-    ['Colaboración técnica', 'Integración API'],
-    ['Campaña de marca', 'Diseño de UX'],
-    ['Tokenización', 'Regulación cripto'],
-    ['Programa educativo', 'Alianza universitaria'],
-    ['Migración a cloud', 'Seguridad'],
-    ['Telemedicina', 'Datos de pacientes'],
-  ]
-
-  const notes = [
-    'Confirmar agenda antes del miércoles',
-    'Preparar presentación de avances',
-    'Enviar resumen ejecutivo previo',
-    null,
-    'Compartir documentación técnica',
-    'Revisar portafolio actualizado',
-    null,
-    'Coordinar con equipo académico',
-    'Revisar SLA propuesto',
-    null,
-  ]
-
-  // Spread follow-ups across the month — some past, some today, some future
-  const dayOffsets = [-5, -2, 0, 0, 1, 2, 3, 5, 6, 10]
-
-  return contacts.map((c, i) => {
-    const date = new Date(y, m, now.getDate() + dayOffsets[i])
-    return {
-      id: `fu-${i + 1}`,
-      ...c,
-      dueDate: date,
-      status: dayOffsets[i] < 0 ? 'overdue' as FollowUpStatus : 'pending' as FollowUpStatus,
-      notes: notes[i],
-      suggestedTopics: topics[i],
-    }
-  })
-}
-
-// ---------- Helpers ----------
-const DAY_NAMES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
-
-function formatSpanishDate(date: Date) {
-  const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-  return `${date.getDate()} de ${months[date.getMonth()]} de ${date.getFullYear()}`
-}
-
-function getMonthLabel(year: number, month: number) {
-  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-  return `${months[month]} ${year}`
-}
+const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 function getCalendarDays(year: number, month: number): (Date | null)[] {
-  const firstDay = new Date(year, month, 1)
-  // Monday-based: 0 = Mon … 6 = Sun
-  let startOffset = firstDay.getDay() - 1
+  const first = new Date(year, month, 1)
+  let startOffset = first.getDay() - 1
   if (startOffset < 0) startOffset = 6
-
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells: (Date | null)[] = []
-
   for (let i = 0; i < startOffset; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d))
-  // fill trailing
   while (cells.length % 7 !== 0) cells.push(null)
   return cells
 }
 
-function tierDotColor(tier: ContactTier): string {
-  const map: Record<ContactTier, string> = {
-    S: 'bg-amber-400',
-    A: 'bg-violet-400',
-    B: 'bg-blue-400',
-    C: 'bg-emerald-400',
-    D: 'bg-zinc-400',
-  }
-  return map[tier]
+function parseDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
-// ---------- Component ----------
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
 export default function CalendarPage() {
+  const today = new Date()
   const [loading, setLoading] = useState(true)
-  const [followUps, setFollowUps] = useState<DemoFollowUp[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
-  const [interactions, setInteractions] = useState<any[]>([])
-  const today = useMemo(() => new Date(), [])
+  const [interactions, setInteractions] = useState<CalendarInteraction[]>([])
+  const [followUps, setFollowUps] = useState<CalendarFollowUp[]>([])
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
-  const [selectedDate, setSelectedDate] = useState<Date>(today)
-  const [showNewInteraction, setShowNewInteraction] = useState(false)
-  const [planFollowUp, setPlanFollowUp] = useState<DemoFollowUp | null>(null)
+  const [selectedDate, setSelectedDate] = useState(today)
+  const [showModal, setShowModal] = useState(false)
+  const [editingInteraction, setEditingInteraction] = useState<CalendarInteraction | null>(null)
 
-  // Load contacts and follow-ups
   useEffect(() => {
-    const loadData = async () => {
+    const load = async () => {
       try {
         const supabase = createClient()
-        const [contactsRes, interactionsRes, followUpsRes] = await Promise.all([
-          supabase.from('contacts').select('*').eq('status', 'active').limit(100),
-          supabase.from('interactions').select('*').order('date', { ascending: false }),
-          supabase.from('follow_ups').select('*, contacts(first_name, last_name, company, tier)').not('status', 'in', '("completed","skipped")')
-        ])
-        if (contactsRes.data) setContacts(contactsRes.data as Contact[])
+        const { data: { user } } = await supabase.auth.getUser()
 
-        // Process interactions with contact data
-        if (interactionsRes.data) {
-          const enrichedInteractions = (interactionsRes.data || []).map((i: any) => {
-            const contact = (contactsRes.data as Contact[] | null)?.find(c => c.id === i.contact_id)
-            return {
-              ...i,
-              contacts: contact ? { first_name: contact.first_name, last_name: contact.last_name, company: contact.company, tier: contact.tier } : null
-            }
-          })
-          setInteractions(enrichedInteractions)
-        }
+        if (user) {
+          const { data: contactsData } = await supabase.from('contacts').select('*').eq('status', 'active')
+          if (contactsData) setContacts(contactsData as Contact[])
 
-        // Real follow_ups from follow_ups table
-        const realFU: DemoFollowUp[] = (followUpsRes.data || []).map((fu: any) => ({
-          id: fu.id,
-          contact_id: fu.contact_id,
-          contactName: fu.contacts?.first_name || '',
-          contactLastName: fu.contacts?.last_name || '',
-          company: fu.contacts?.company || '',
-          tier: (fu.contacts?.tier || 'C') as ContactTier,
-          dueDate: new Date(fu.due_date + 'T12:00:00'),
-          status: fu.status as FollowUpStatus,
-          notes: fu.notes,
-          suggestedTopics: fu.suggested_topics || [],
-        }))
+          const { data: interactionsData } = await supabase.from('interactions').select('*').order('date', { ascending: false })
+          if (interactionsData) setInteractions(interactionsData as CalendarInteraction[])
 
-        // Virtual follow_ups from contacts.next_follow_up_date
-        const virtualFU: DemoFollowUp[] = (contactsRes.data || [])
-          .filter((c: any) => c.next_follow_up_date)
-          .filter((c: any) => !realFU.some(f => f.contact_id === c.id))
-          .map((c: any) => ({
-            id: 'vfu-' + c.id,
-            contact_id: c.id,
-            contactName: c.first_name,
-            contactLastName: c.last_name || '',
-            company: c.company || '',
-            tier: c.tier as ContactTier,
-            dueDate: new Date(c.next_follow_up_date + 'T12:00:00'),
-            status: 'pending' as FollowUpStatus,
-            notes: null,
-            suggestedTopics: [],
-          }))
-
-        if (realFU.length > 0 || virtualFU.length > 0) {
-          setFollowUps([...realFU, ...virtualFU])
-        } else if (localStorage.getItem('demoMode') === 'true') {
-          setFollowUps(buildDemoData())
+          const { data: followUpsData } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
+          if (followUpsData) {
+            const enriched = (followUpsData as any[]).map(fu => ({
+              ...fu,
+              contact: contactsData?.find(c => c.id === fu.contact_id)
+            }))
+            setFollowUps(enriched)
+          }
         }
       } catch (e) {
-        console.error('Error loading calendar data:', e)
-        if (localStorage.getItem('demoMode') === 'true') {
-          setFollowUps(buildDemoData())
-        }
+        console.error('Calendar load error:', e)
       }
       setLoading(false)
     }
-
-    const t = setTimeout(loadData, 300)
-    return () => clearTimeout(t)
+    load()
   }, [])
 
-  // Parse YYYY-MM-DD as local date
-  function parseLocalDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+  const calendarDays = getCalendarDays(viewYear, viewMonth)
+  const interactionsByDate = interactions.reduce((acc, i) => {
+    if (!acc[i.date]) acc[i.date] = []
+    acc[i.date].push(i)
+    return acc
+  }, {} as Record<string, CalendarInteraction[]>)
 
-  // Match follow-up with interaction by contact_id + date proximity
-  function findLinkedInteraction(fu: DemoFollowUp) {
-    return interactions.find(i => {
-      if (i.contact_id !== fu.contact_id) return false
-      const iDate = parseLocalDate(i.date)
-      // Same day or within 1 day
-      return Math.abs(iDate.getTime() - fu.dueDate.getTime()) <= 86400000
-    })
-  }
+  const followUpsByDate = followUps.reduce((acc, fu) => {
+    if (!acc[fu.due_date]) acc[fu.due_date] = []
+    acc[fu.due_date].push(fu)
+    return acc
+  }, {} as Record<string, CalendarFollowUp[]>)
 
-  // Interactions indexed by date
-  const interactionsByDate = useMemo(() => {
-    const map: Record<string, any[]> = {}
-    interactions.forEach(i => {
-      const key = parseLocalDate(i.date).toDateString()
-      if (!map[key]) map[key] = []
-      map[key].push(i)
-    })
-    return map
-  }, [interactions])
+  const selectedDateStr = dateKey(selectedDate)
+  const dayInteractions = interactionsByDate[selectedDateStr] || []
+  const dayFollowUps = followUpsByDate[selectedDateStr] || []
 
-  const selectedDayInteractions = useMemo(() => interactionsByDate[selectedDate.toDateString()] || [], [interactionsByDate, selectedDate])
+  const upcomingStart = new Date(today)
+  upcomingStart.setHours(0, 0, 0, 0)
+  const upcomingEnd = new Date(today)
+  upcomingEnd.setDate(upcomingEnd.getDate() + 7)
 
-  const upcomingInteractions = useMemo(() => {
-    const start = new Date(today); start.setHours(0,0,0,0)
-    const end = new Date(today); end.setDate(end.getDate() + 7); end.setHours(23,59,59,999)
-    return interactions.filter(i => { const d = parseLocalDate(i.date); return d >= start && d <= end })
-      .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime())
-  }, [interactions, today])
+  const upcomingInteractions = interactions.filter(i => {
+    const d = parseDate(i.date)
+    return d >= upcomingStart && d <= upcomingEnd
+  }).sort((a, b) => a.date.localeCompare(b.date))
 
-  // Calendar grid
-  const calendarDays = useMemo(() => getCalendarDays(viewYear, viewMonth), [viewYear, viewMonth])
+  const upcomingFollowUps = followUps.filter(fu => {
+    const d = parseDate(fu.due_date)
+    return d >= upcomingStart && d <= upcomingEnd
+  }).sort((a, b) => a.due_date.localeCompare(b.due_date))
 
-  // Follow-ups indexed by date string
-  const followUpsByDate = useMemo(() => {
-    const map: Record<string, DemoFollowUp[]> = {}
-    followUps.forEach((fu) => {
-      const key = fu.dueDate.toDateString()
-      if (!map[key]) map[key] = []
-      map[key].push(fu)
-    })
-    return map
-  }, [followUps])
+  const getContactInfo = (contactId: string) => contacts.find(c => c.id === contactId)
 
-  // Selected day follow-ups
-  const selectedFollowUps = useMemo(
-    () => followUpsByDate[selectedDate.toDateString()] || [],
-    [followUpsByDate, selectedDate],
-  )
-
-  // Upcoming 7 days
-  const upcoming7 = useMemo(() => {
-    const start = new Date(today)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(today)
-    end.setDate(end.getDate() + 7)
-    end.setHours(23, 59, 59, 999)
-    return followUps
-      .filter((fu) => fu.dueDate >= start && fu.dueDate <= end && fu.status !== 'completed' && fu.status !== 'skipped')
-      .map((fu) => ({
-        ...fu,
-        linkedInteraction: findLinkedInteraction(fu)
-      }))
-      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-  }, [followUps, today, interactions])
-
-  // Group upcoming by day
-  const upcomingGrouped = useMemo(() => {
-    const groups: { date: Date; items: (DemoFollowUp & { linkedInteraction?: any })[] }[] = []
-    const map = new Map<string, (DemoFollowUp & { linkedInteraction?: any })[]>()
-    upcoming7.forEach((fu) => {
-      const key = fu.dueDate.toDateString()
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(fu)
-    })
-    map.forEach((items, key) => {
-      groups.push({ date: new Date(key), items })
-    })
-    groups.sort((a, b) => a.date.getTime() - b.date.getTime())
-    return groups
-  }, [upcoming7])
-
-  // Nav
-  function prevMonth() {
-    if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11) }
-    else setViewMonth(viewMonth - 1)
-  }
-  function nextMonth() {
-    if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0) }
-    else setViewMonth(viewMonth + 1)
-  }
-
-  // Actions
-  function handleComplete(id: string) {
-    setFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, status: 'completed' as FollowUpStatus } : fu))
-  }
-  function handlePostpone(id: string) {
-    setFollowUps((prev) =>
-      prev.map((fu) => {
-        if (fu.id !== id) return fu
-        const newDate = new Date(fu.dueDate)
-        newDate.setDate(newDate.getDate() + 7)
-        return { ...fu, dueDate: newDate }
-      }),
-    )
-  }
-  function handleSkip(id: string) {
-    setFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, status: 'skipped' as FollowUpStatus } : fu))
-  }
-
-  // ---------- Loading skeleton ----------
-  if (loading) {
-    return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-8 w-64 rounded-lg bg-zinc-800/60" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-96 rounded-xl bg-zinc-800/40" />
-          <div className="h-96 rounded-xl bg-zinc-800/40" />
-        </div>
-        <div className="h-48 rounded-xl bg-zinc-800/40" />
-      </div>
-    )
-  }
+  if (loading) return <div className="animate-pulse space-y-6"><div className="h-96 bg-zinc-800/50 rounded-xl" /></div>
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-indigo-500/10">
           <CalendarIcon className="w-5 h-5 text-indigo-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Calendario de Seguimientos</h1>
-          <p className="text-sm text-zinc-400">Visualiza y gestiona tus seguimientos programados</p>
+          <h1 className="text-2xl font-bold text-white">Calendario</h1>
+          <p className="text-sm text-zinc-400">Seguimientos (ámbar) e Interacciones (azul)</p>
         </div>
       </div>
 
-      {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar */}
-        <div className="lg:col-span-2 bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6">
-          {/* Month nav */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={prevMonth}
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
-            >
+        <div className="lg:col-span-2 bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => { if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11) } else setViewMonth(viewMonth - 1) }} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <h2 className="text-lg font-semibold text-white">{getMonthLabel(viewYear, viewMonth)}</h2>
-            <button
-              onClick={nextMonth}
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
-            >
+            <h2 className="text-lg font-semibold text-white">{months[viewMonth]} {viewYear}</h2>
+            <button onClick={() => { if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0) } else setViewMonth(viewMonth + 1) }} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400">
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Day names */}
-          <div className="grid grid-cols-7 mb-2">
-            {DAY_NAMES.map((d) => (
-              <div key={d} className="text-center text-xs font-medium text-zinc-500 py-1">{d}</div>
-            ))}
+          <div className="grid grid-cols-7 mb-2 gap-1">
+            {dayNames.map(d => <div key={d} className="text-center text-xs font-medium text-zinc-500 py-2">{d}</div>)}
           </div>
 
-          {/* Day cells */}
           <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((date, idx) => {
-              if (!date) {
-                return <div key={`empty-${idx}`} className="aspect-square" />
-              }
-              const key = date.toDateString()
-              const fus = followUpsByDate[key] || []
+              if (!date) return <div key={`e${idx}`} className="aspect-square" />
+              const key = dateKey(date)
               const ints = interactionsByDate[key] || []
+              const fus = followUpsByDate[key] || []
               const isToday = isSameDay(date, today)
               const isSelected = isSameDay(date, selectedDate)
               const isCurrentMonth = date.getMonth() === viewMonth
@@ -449,24 +176,13 @@ export default function CalendarPage() {
                 <button
                   key={key}
                   onClick={() => setSelectedDate(date)}
-                  className={cn(
-                    'aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm transition-all duration-200 relative',
-                    isCurrentMonth ? 'text-zinc-300' : 'text-zinc-600',
-                    isToday && 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-[#0f0f14]',
-                    isSelected && !isToday && 'bg-indigo-500/20 text-indigo-300',
-                    isSelected && isToday && 'bg-indigo-500/20',
-                    !isSelected && 'hover:bg-zinc-800/60',
-                  )}
+                  className={cn('aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm font-medium transition-all', isCurrentMonth ? 'text-zinc-300' : 'text-zinc-600', isToday && 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-[#0f0f14]', isSelected && !isToday && 'bg-indigo-500/20', !isSelected && 'hover:bg-zinc-800/40')}
                 >
-                  <span className="font-medium">{date.getDate()}</span>
-                  {(fus.length > 0 || ints.length > 0) && (
+                  <span className="text-xs">{date.getDate()}</span>
+                  {(ints.length > 0 || fus.length > 0) && (
                     <div className="flex gap-0.5">
-                      {fus.slice(0, 2).map((fu, i) => (
-                        <span key={i} className={cn('w-1.5 h-1.5 rounded-full', tierDotColor(fu.tier))} />
-                      ))}
-                      {ints.slice(0, 2).map((_, i) => (
-                        <span key={'i'+i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      ))}
+                      {fus.slice(0, 2).map((_, i) => <span key={`fu${i}`} className="w-1.5 h-1.5 rounded-full bg-amber-400" />)}
+                      {ints.slice(0, 2).map((_, i) => <span key={`int${i}`} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
                     </div>
                   )}
                 </button>
@@ -475,282 +191,112 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Side panel */}
-        <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6 max-h-[500px] overflow-y-auto">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-1">
-            Seguimientos para
-          </h3>
-          <p className="text-white font-semibold mb-4">{formatSpanishDate(selectedDate)}</p>
-
-          {selectedFollowUps.length === 0 && selectedDayInteractions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <CalendarIcon className="w-10 h-10 text-zinc-700 mb-3" />
-              <p className="text-zinc-500 text-sm">Sin eventos para este día</p>
-            </div>
+        <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-6 max-h-[600px] overflow-y-auto">
+          <h3 className="text-sm font-semibold text-zinc-400 mb-2">EVENTOS PARA</h3>
+          <p className="text-white font-semibold mb-4">{selectedDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          {dayInteractions.length === 0 && dayFollowUps.length === 0 ? (
+            <p className="text-zinc-500 text-sm text-center py-8">Sin eventos</p>
           ) : (
             <div className="space-y-3">
-              {selectedDayInteractions.map((i: any) => (
-                <div key={i.id} className="rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-500/20 text-indigo-300">
-                      {getInitials(i.contacts?.first_name || '', i.contacts?.last_name || '')}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-white font-medium text-sm truncate">{i.title}</p>
-                      <p className="text-xs text-zinc-400">{i.contacts?.first_name} {i.contacts?.last_name}</p>
-                      <p className="text-xs text-zinc-500 truncate">{i.contacts?.company}</p>
-                      {i.description && <p className="text-xs text-zinc-400 mt-1 truncate">{i.description}</p>}
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
-                      {i.type}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {selectedFollowUps.map((fu) => {
-                const linkedInteraction = findLinkedInteraction(fu)
+              {dayInteractions.map(i => {
+                const contact = getContactInfo(i.contact_id)
                 return (
-                <div
-                  key={fu.id}
-                  className={cn(
-                    'rounded-lg border p-3 transition-all duration-300 relative',
-                    fu.status === 'completed'
-                      ? 'bg-emerald-900/10 border-emerald-800/30 opacity-60'
-                      : fu.status === 'skipped'
-                        ? 'bg-zinc-800/20 border-zinc-700/30 opacity-50'
-                        : 'bg-zinc-900/50 border-zinc-800/50',
-                  )}
-                >
-                  {/* Indicator badge */}
-                  {(fu.status === 'pending' || fu.status === 'overdue') && (
-                    linkedInteraction ? (
-                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40">
-                        <Check className="w-3 h-3 text-emerald-400" />
+                  <div key={i.id} className="rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium text-sm truncate">{i.title}</p>
+                        <p className="text-xs text-zinc-400">{contact?.first_name} {contact?.last_name}</p>
                       </div>
-                    ) : (
-                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/40">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                      </div>
-                    )
-                  )}
-
-                  {/* Contact info */}
-                  <div className="flex items-start gap-3 mb-2">
-                    <div className={cn(
-                      'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                      tierConfig[fu.tier].bgColor,
-                      tierConfig[fu.tier].color,
-                    )}>
-                      {getInitials(fu.contactName, fu.contactLastName)}
+                      <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
+                        <Edit2 className="w-3 h-3" />
+                      </button>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-white font-medium text-sm truncate">
-                        {fu.contactName} {fu.contactLastName}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-zinc-500">
-                        <Building2 className="w-3 h-3" />
-                        <span className="truncate">{fu.company}</span>
-                      </div>
-                    </div>
-                    <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0',
-                      tierConfig[fu.tier].bgColor,
-                      tierConfig[fu.tier].color,
-                    )}>
-                      {fu.tier}
-                    </span>
                   </div>
-
-                  {/* Notes */}
-                  {fu.notes && (
-                    <div className="flex items-start gap-2 mb-2 pl-12">
-                      <MessageSquare className="w-3 h-3 text-zinc-600 mt-0.5 shrink-0" />
-                      <p className="text-xs text-zinc-400">{fu.notes}</p>
+                )
+              })}
+              {dayFollowUps.map(fu => {
+                const contact = fu.contact
+                return (
+                  <div key={fu.id} className="rounded-lg border border-amber-800/30 bg-amber-900/10 p-3">
+                    <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold', tierConfig[contact?.tier || 'C'].bgColor, tierConfig[contact?.tier || 'C'].color)}>
+                      {getInitials(contact?.first_name || '', contact?.last_name || '')}
                     </div>
-                  )}
-
-                  {/* Actions */}
-                  {fu.status === 'pending' || fu.status === 'overdue' ? (
-                    <div className="flex flex-wrap gap-2 pl-12 mt-2">
-                      <button
-                        onClick={() => handleComplete(fu.id)}
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
-                      >
-                        <Check className="w-3 h-3" /> Completar
-                      </button>
-                      <button
-                        onClick={() => handlePostpone(fu.id)}
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors border border-amber-500/20"
-                      >
-                        <Clock className="w-3 h-3" /> Posponer 1 semana
-                      </button>
-                      <button
-                        onClick={() => handleSkip(fu.id)}
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 transition-colors border border-zinc-500/20"
-                      >
-                        <SkipForward className="w-3 h-3" /> Saltar
-                      </button>
-                      {!linkedInteraction && (
-                        <button
-                          onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
-                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
-                        >
-                          <Plus className="w-3 h-3" /> Crear interacción
-                        </button>
-                      )}
-                      <button
-                        onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
-                        title="Descargar cita (.ics)"
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors border border-indigo-500/20"
-                      >
-                        <Download className="w-3 h-3" /> Guardar en calendario
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="pl-12 mt-1">
-                      <span className={cn(
-                        'text-[11px] font-medium px-2 py-0.5 rounded',
-                        fu.status === 'completed' ? 'text-emerald-400 bg-emerald-400/10' : 'text-zinc-500 bg-zinc-800/50',
-                      )}>
-                        {fu.status === 'completed' ? 'Completado' : 'Saltado'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
+                    <p className="text-white font-medium text-sm mt-2">{contact?.first_name} {contact?.last_name}</p>
+                    <p className="text-xs text-zinc-400">{contact?.company}</p>
+                    {fu.notes && <p className="text-xs text-zinc-500 mt-1">{fu.notes}</p>}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {/* Upcoming 7 days */}
-      <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-semibold text-white">Proximos 7 dias</h2>
-          </div>
-          <button onClick={() => setShowNewInteraction(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Registrar
+      <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-400" />Próximos 7 días
+          </h2>
+          <button onClick={() => { setEditingInteraction(null); setShowModal(true) }} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 rounded-lg">
+            <Plus className="w-3 h-3" />Registrar
           </button>
         </div>
-
-        {upcomingGrouped.length === 0 && upcomingInteractions.length === 0 ? (
-          <p className="text-zinc-500 text-sm py-4">No hay eventos en los próximos 7 días.</p>
+        {upcomingInteractions.length === 0 && upcomingFollowUps.length === 0 ? (
+          <p className="text-zinc-500 text-sm">No hay eventos próximos</p>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {upcomingInteractions.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wide mb-2">Interacciones registradas</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {upcomingInteractions.map((i: any) => (
-                    <div key={i.id} className="flex items-start gap-3 rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-500/20 text-indigo-300">
-                        {getInitials(i.contacts?.first_name || '', i.contacts?.last_name || '')}
+                <h3 className="text-xs font-semibold text-indigo-400 mb-2 uppercase">Interacciones</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {upcomingInteractions.map(i => {
+                    const contact = getContactInfo(i.contact_id)
+                    return (
+                      <div key={i.id} className="flex items-start gap-2 rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-indigo-500/20 text-indigo-300 shrink-0">
+                          {getInitials(contact?.first_name || '', contact?.last_name || '')}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{i.title}</p>
+                          <p className="text-xs text-zinc-400">{contact?.first_name}</p>
+                          <p className="text-[10px] text-zinc-500">{i.date}</p>
+                        </div>
+                        <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
+                          <Edit2 className="w-3 h-3" />
+                        </button>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-white text-sm font-medium truncate">{i.title}</p>
-                        <p className="text-xs text-zinc-400">{i.contacts?.first_name} {i.contacts?.last_name}</p>
-                        <p className="text-xs text-zinc-500">{parseLocalDate(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short' })}{i.duration_minutes ? ` · ${i.duration_minutes}min` : ''}</p>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
-            {upcomingGrouped.map((group) => (
-              <div key={group.date.toDateString()}>
-                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
-                  {isSameDay(group.date, today) ? 'Hoy' : formatSpanishDate(group.date)}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {group.items.map((fu) => (
-                    <div
-                      key={fu.id}
-                      className="flex items-start gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/40 p-3 hover:border-zinc-700/60 transition-colors relative"
-                    >
-                      {/* Indicator badge */}
-                      {fu.linkedInteraction ? (
-                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40" title="Interacción registrada">
-                          <Check className="w-2.5 h-2.5 text-emerald-400" />
+            {upcomingFollowUps.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-amber-400 mb-2 uppercase">Seguimientos</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {upcomingFollowUps.map(fu => {
+                    const contact = fu.contact
+                    return (
+                      <div key={fu.id} className="flex items-start gap-2 rounded-lg border border-amber-800/30 bg-amber-900/10 p-3">
+                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', tierConfig[contact?.tier || 'C'].bgColor, tierConfig[contact?.tier || 'C'].color)}>
+                          {getInitials(contact?.first_name || '', contact?.last_name || '')}
                         </div>
-                      ) : (
-                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/40" title="Sin interacción registrada">
-                          <Clock className="w-2.5 h-2.5 text-amber-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium">{contact?.first_name} {contact?.last_name}</p>
+                          <p className="text-xs text-zinc-400">{contact?.company}</p>
+                          <p className="text-[10px] text-zinc-500">{fu.due_date}</p>
                         </div>
-                      )}
-
-                      <div className={cn(
-                        'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                        tierConfig[fu.tier].bgColor,
-                        tierConfig[fu.tier].color,
-                      )}>
-                        {getInitials(fu.contactName, fu.contactLastName)}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-white text-sm font-medium truncate">
-                            {fu.contactName} {fu.contactLastName}
-                          </p>
-                          <span className={cn(
-                            'text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0',
-                            tierConfig[fu.tier].bgColor,
-                            tierConfig[fu.tier].color,
-                          )}>
-                            {fu.tier}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-500 truncate">{fu.company}</p>
-                        {fu.suggestedTopics.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {fu.suggestedTopics.map((t, i) => (
-                              <span
-                                key={i}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        {!fu.linkedInteraction && (
-                          <button
-                            onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
-                            className="p-1.5 rounded-md hover:bg-violet-800 text-violet-500 hover:text-violet-300 transition-colors"
-                            title="Crear interacción"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
-                          title="Descargar cita (.ics)"
-                          className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
 
-      <InteractionModal
-        isOpen={showNewInteraction}
-        onClose={() => { setShowNewInteraction(false); setPlanFollowUp(null) }}
-        contacts={contacts}
-        contactId={planFollowUp?.contact_id}
-        contactName={planFollowUp ? `${planFollowUp.contactName} ${planFollowUp.contactLastName}`.trim() : undefined}
-        defaultDate={planFollowUp ? planFollowUp.dueDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
-      />
+      <InteractionModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInteraction(null) }} contacts={contacts} contactId={editingInteraction?.contact_id} defaultDate={editingInteraction?.date || dateKey(selectedDate)} existing={editingInteraction} onSaved={() => { setShowModal(false); setEditingInteraction(null) }} />
     </div>
   )
 }
