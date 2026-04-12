@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
-import { ContactTier, InteractionType, InteractionSentiment, Contact } from '@/lib/types/database'
+import { ContactTier, Contact } from '@/lib/types/database'
 import { useUser } from '@/lib/supabase/hooks'
+import InteractionModal, { downloadInteractionICS } from '@/components/interaction-modal'
 
-const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada', email:'Email', coffee:'Café', lunch:'Comida', event:'Evento', linkedin:'LinkedIn', whatsapp:'WhatsApp', other:'Otro' }
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
+const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada', email:'Email', coffee:'Café', lunch:'Comida', event:'Evento', linkedin:'LinkedIn', whatsapp:'WhatsApp', other:'Otro' }
 const sentimentOpts = [{ v:'very_positive', l:'Excelente', c:'bg-green-500/20 text-green-400' },{ v:'positive', l:'Bien', c:'bg-emerald-500/20 text-emerald-400' },{ v:'neutral', l:'Neutral', c:'bg-zinc-500/20 text-zinc-400' },{ v:'negative', l:'Mal', c:'bg-orange-500/20 text-orange-400' }]
 const outcomeTypes = [{ v:'job_lead', l:'Oportunidad laboral' },{ v:'introduction', l:'Presentación' },{ v:'advice', l:'Consejo' },{ v:'collaboration', l:'Colaboración' },{ v:'referral', l:'Referencia' },{ v:'information', l:'Información' },{ v:'opportunity', l:'Oportunidad' }]
 
@@ -97,9 +98,7 @@ export default function ContactDetailPage() {
   const [showAddInterest, setShowAddInterest] = useState(false)
   const [newInterestName, setNewInterestName] = useState('')
   const [newInterestPositive, setNewInterestPositive] = useState(true)
-  const [savingInteraction, setSavingInteraction] = useState(false)
   const [savingOutcome, setSavingOutcome] = useState(false)
-  const [newInteraction, setNewInteraction] = useState({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30, startTime: '09:00', endTime: '10:00' })
   const [newOutcome, setNewOutcome] = useState({ type:'introduction', title:'', description:'', rating:3 })
 
   useEffect(() => {
@@ -228,32 +227,46 @@ export default function ContactDetailPage() {
                 <Plus className="w-4 h-4" /> Registrar interacción
               </button>
               {interactions.length > 0 ? (
-                interactions.map(i => (
-                  <div key={i.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="text-2xl mt-0.5">{typeIcons[i.type] || '📌'}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm font-semibold text-white">{i.title}</h3>
-                          {i.sentiment && <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>
-                            {sentimentOpts.find(s => s.v === i.sentiment)?.l}
-                          </span>}
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">{typeLabels[i.type] || i.type} · {new Date(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} {i.duration_minutes && `· ${i.duration_minutes}min`}</p>
-                        {i.description && <p className="text-sm text-zinc-300 mt-2">{i.description}</p>}
-                        {i.key_takeaways && i.key_takeaways.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {i.key_takeaways.map((t: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                <ChevronRight className="w-3 h-3 text-indigo-400" />{t}
-                              </div>
-                            ))}
+                interactions.map(i => {
+                  const startTime = '09:00'
+                  const dur = i.duration_minutes || 60
+                  const endH = Math.floor((9 * 60 + dur) / 60)
+                  const endM = (9 * 60 + dur) % 60
+                  const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`
+                  return (
+                    <div key={i.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="text-2xl mt-0.5">{typeIcons[i.type] || '📌'}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-semibold text-white">{i.title}</h3>
+                            {i.sentiment && <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>
+                              {sentimentOpts.find(s => s.v === i.sentiment)?.l}
+                            </span>}
                           </div>
-                        )}
+                          <p className="text-xs text-zinc-500 mt-0.5">{typeLabels[i.type] || i.type} · {new Date(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} {i.duration_minutes && `· ${i.duration_minutes}min`}</p>
+                          {i.description && <p className="text-sm text-zinc-300 mt-2">{i.description}</p>}
+                          {i.key_takeaways && i.key_takeaways.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {i.key_takeaways.map((t: string, idx: number) => (
+                                <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                  <ChevronRight className="w-3 h-3 text-indigo-400" />{t}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => downloadInteractionICS(i.title, `${c.first_name} ${c.last_name || ''}`.trim(), i.date, startTime, endTime, i.description)}
+                            title="Exportar .ics"
+                            className="mt-2 flex items-center gap-1 text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+                          >
+                            <Download className="w-3 h-3" /> Exportar .ics
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-8 text-center">
                   <p className="text-zinc-400 text-sm">No hay interacciones registradas</p>
@@ -341,94 +354,17 @@ export default function ContactDetailPage() {
         </div>
       </div>
 
-      {/* Add Interaction Modal */}
-      {showInteractionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInteractionModal(false)} />
-          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white">Nueva interacción</h2>
-              <button onClick={() => setShowInteractionModal(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo</label>
-                <select value={newInteraction.type} onChange={e => setNewInteraction(p => ({ ...p, type: e.target.value as InteractionType }))}
-                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
-                  {Object.entries(typeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Título</label>
-                <input type="text" value={newInteraction.title} onChange={e => setNewInteraction(p => ({ ...p, title: e.target.value }))}
-                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Café en el Retiro" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha</label>
-                  <input type="date" value={newInteraction.date} onChange={e => setNewInteraction(p => ({ ...p, date: e.target.value }))}
-                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Sentimiento</label>
-                  <select value={newInteraction.sentiment} onChange={e => setNewInteraction(p => ({ ...p, sentiment: e.target.value as InteractionSentiment }))}
-                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
-                    {sentimentOpts.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora inicio</label>
-                  <input type="time" value={(newInteraction as any).startTime || '09:00'} onChange={e => setNewInteraction(p => ({ ...p, startTime: e.target.value } as any))}
-                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora fin</label>
-                  <input type="time" value={(newInteraction as any).endTime || '10:00'} onChange={e => setNewInteraction(p => ({ ...p, endTime: e.target.value } as any))}
-                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Duración (min)</label>
-                  <input type="number" value={newInteraction.duration_minutes} onChange={e => setNewInteraction(p => ({ ...p, duration_minutes: parseInt(e.target.value) || 30 }))}
-                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
-                <textarea value={newInteraction.description} onChange={e => setNewInteraction(p => ({ ...p, description: e.target.value }))} rows={3}
-                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setShowInteractionModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
-              <button onClick={async () => {
-                if (!newInteraction.title.trim()) return alert('Título requerido')
-                if (!user) return alert('Sesión no encontrada, recarga la página')
-                setSavingInteraction(true)
-                try {
-                  const supabase = createClient()
-                  const { error } = await supabase.from('interactions').insert({
-                    user_id: user.id, contact_id: c.id, type: newInteraction.type, title: newInteraction.title,
-                    date: newInteraction.date, sentiment: newInteraction.sentiment,
-                    description: newInteraction.description, duration_minutes: newInteraction.duration_minutes
-                  })
-                  if (error) throw error
-                  setShowInteractionModal(false)
-                  setNewInteraction({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30, startTime: '09:00', endTime: '10:00' })
-                  const { data } = await supabase.from('interactions').select('*').eq('contact_id', c.id).order('date', { ascending: false })
-                  if (data) setInteractions(data)
-                } catch (e) {
-                  console.error(e)
-                  alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
-                } finally {
-                  setSavingInteraction(false)
-                }
-              }} disabled={savingInteraction} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{savingInteraction ? 'Guardando...' : 'Guardar'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <InteractionModal
+        isOpen={showInteractionModal}
+        onClose={() => setShowInteractionModal(false)}
+        contactId={c.id}
+        contactName={`${c.first_name} ${c.last_name || ''}`.trim()}
+        onSaved={async () => {
+          const supabase = createClient()
+          const { data } = await supabase.from('interactions').select('*').eq('contact_id', c.id).order('date', { ascending: false })
+          if (data) setInteractions(data)
+        }}
+      />
 
       {/* Add Outcome Modal */}
       {showOutcomeModal && (
