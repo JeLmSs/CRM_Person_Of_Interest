@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { InteractionType, InteractionSentiment, Contact } from '@/lib/types/database'
@@ -74,6 +74,34 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
     endTime: existing?.duration_minutes ? durToEnd('09:00', existing.duration_minutes) : '10:00',
     description: existing?.description || '',
   })
+
+  // Update form when existing changes or modal opens
+  useEffect(() => {
+    if (isOpen && existing) {
+      const dateStr = existing.date.includes('T') ? existing.date.split('T')[0] : existing.date
+      setForm({
+        type: existing.type as InteractionType,
+        title: existing.title,
+        date: dateStr,
+        sentiment: existing.sentiment as InteractionSentiment,
+        startTime: '09:00',
+        endTime: existing.duration_minutes ? durToEnd('09:00', existing.duration_minutes) : '10:00',
+        description: existing.description || '',
+      })
+      setSelectedContactId(existing.contact_id || contactId || '')
+    } else if (isOpen && !existing) {
+      setForm({
+        type: 'meeting' as InteractionType,
+        title: '',
+        date: defaultDate || new Date().toISOString().split('T')[0],
+        sentiment: 'neutral' as InteractionSentiment,
+        startTime: '09:00',
+        endTime: '10:00',
+        description: '',
+      })
+      setSelectedContactId(contactId || '')
+    }
+  }, [isOpen, existing, contactId, defaultDate])
 
   if (!isOpen) return null
 
