@@ -135,7 +135,7 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
       const resolvedContact = contacts?.find(c => c.id === cid)
       const resolvedName = contactName || (resolvedContact ? `${resolvedContact.first_name} ${resolvedContact.last_name || ''}`.trim() : '')
       setSavedData({ contactName: resolvedName, title: form.title, date: form.date, startTime: form.startTime, endTime: form.endTime, description: form.description })
-      onSaved?.()
+      // Don't call onSaved here - let user click Close button
     } catch (e) {
       alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
     } finally {
@@ -165,7 +165,7 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
               >
                 <Download className="w-4 h-4" /> Exportar .ics
               </button>
-              <button onClick={handleClose} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Cerrar</button>
+              <button onClick={() => { onSaved?.(); handleClose() }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Cerrar</button>
             </div>
           </div>
         ) : (
