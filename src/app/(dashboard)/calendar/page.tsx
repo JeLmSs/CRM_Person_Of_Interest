@@ -198,11 +198,22 @@ export default function CalendarPage() {
         const supabase = createClient()
         const [contactsRes, interactionsRes, followUpsRes] = await Promise.all([
           supabase.from('contacts').select('*').eq('status', 'active').limit(100),
-          supabase.from('interactions').select('*, contacts(first_name, last_name, company, tier)').order('date', { ascending: false }),
+          supabase.from('interactions').select('*').order('date', { ascending: false }),
           supabase.from('follow_ups').select('*, contacts(first_name, last_name, company, tier)').not('status', 'in', '("completed","skipped")')
         ])
         if (contactsRes.data) setContacts(contactsRes.data as Contact[])
-        if (interactionsRes.data) setInteractions(interactionsRes.data)
+
+        // Process interactions with contact data
+        if (interactionsRes.data) {
+          const enrichedInteractions = (interactionsRes.data || []).map((i: any) => {
+            const contact = (contactsRes.data as Contact[] | null)?.find(c => c.id === i.contact_id)
+            return {
+              ...i,
+              contacts: contact ? { first_name: contact.first_name, last_name: contact.last_name, company: contact.company, tier: contact.tier } : null
+            }
+          })
+          setInteractions(enrichedInteractions)
+        }
 
         // Real follow_ups from follow_ups table
         const realFU: DemoFollowUp[] = (followUpsRes.data || []).map((fu: any) => ({
@@ -241,8 +252,10 @@ export default function CalendarPage() {
           setFollowUps(buildDemoData())
         }
       } catch (e) {
-        console.error(e)
-        if (localStorage.getItem('demoMode') === 'true') setFollowUps(buildDemoData())
+        console.error('Error loading calendar data:', e)
+        if (localStorage.getItem('demoMode') === 'true') {
+          setFollowUps(buildDemoData())
+        }
       }
       setLoading(false)
     }
