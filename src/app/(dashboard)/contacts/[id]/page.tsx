@@ -163,14 +163,14 @@ export default function ContactDetailPage() {
             <div className="flex items-center gap-2 text-zinc-400"><MapPin className="w-4 h-4 text-zinc-500" />{c.city}, {c.country}</div>
             <div className="flex items-center gap-2 text-zinc-400"><Clock className="w-4 h-4 text-zinc-500" />Seguimiento: {c.follow_up_frequency === 'weekly' ? 'Semanal' : 'Mensual'}</div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {new Date(c.next_follow_up_date).toLocaleDateString('es-ES')}</div>
-              <button
-                onClick={() => downloadFollowUpICS(`${c.first_name} ${c.last_name}`, c.company, c.job_title, new Date(c.next_follow_up_date), c.notes)}
+              <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {c.next_follow_up_date ? new Date(c.next_follow_up_date).toLocaleDateString('es-ES') : 'No definido'}</div>
+              {c.next_follow_up_date && <button
+                onClick={() => downloadFollowUpICS(`${c.first_name} ${c.last_name}`, c.company || '', c.job_title || '', new Date(c.next_follow_up_date!), c.notes)}
                 title="Descargar cita (.ics)"
                 className="p-1 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
-              </button>
+              </button>}
             </div>
           </div>
           <div className="flex gap-2 mt-6">
@@ -250,22 +250,14 @@ export default function ContactDetailPage() {
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-emerald-400 mb-3">Le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {c.interests?.filter((i: any) => i.positive).length ?
-                    c.interests.filter((i: any) => i.positive).map((i: any) => (
-                      <span key={i.id} className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">{i.name}</span>
-                    ))
-                  : <span className="text-xs text-zinc-500">Sin datos</span>}
+                  <span className="text-xs text-zinc-500">Funcionalidad para agregar intereses</span>
                   <button onClick={() => { setNewInterestPositive(true); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-red-400 mb-3">No le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {c.interests?.filter((i: any) => !i.positive).length ?
-                    c.interests.filter((i: any) => !i.positive).map((i: any) => (
-                      <span key={i.id} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full text-xs font-medium">{i.name}</span>
-                    ))
-                  : <span className="text-xs text-zinc-500">Sin datos</span>}
+                  <span className="text-xs text-zinc-500">Funcionalidad para agregar intereses</span>
                   <button onClick={() => { setNewInterestPositive(false); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
