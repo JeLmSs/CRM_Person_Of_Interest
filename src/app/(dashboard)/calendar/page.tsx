@@ -12,9 +12,12 @@ import {
   Building2,
   MessageSquare,
   Download,
+  Plus,
+  X,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { cn, tierConfig, getInitials } from '@/lib/utils'
-import { ContactTier, FollowUpStatus } from '@/lib/types/database'
+import { ContactTier, FollowUpStatus, Contact } from '@/lib/types/database'
 
 // ---------- Types ----------
 interface DemoFollowUp {
@@ -178,19 +181,34 @@ function tierDotColor(tier: ContactTier): string {
 export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [followUps, setFollowUps] = useState<DemoFollowUp[]>([])
+  const [contacts, setContacts] = useState<Contact[]>([])
   const today = useMemo(() => new Date(), [])
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<Date>(today)
+  const [showNewInteraction, setShowNewInteraction] = useState(false)
+  const [selectedContact, setSelectedContact] = useState<string>('')
+  const [newInteractionData, setNewInteractionData] = useState({ title: '', date: new Date().toISOString().split('T')[0], startTime: '09:00', endTime: '10:00' })
+  const [savingInteraction, setSavingInteraction] = useState(false)
 
-  // Load follow-ups (demo data only if flag is enabled)
+  // Load contacts and follow-ups
   useEffect(() => {
-    const t = setTimeout(() => {
+    const loadData = async () => {
+      try {
+        const supabase = createClient()
+        const { data: contactsData } = await supabase.from('contacts').select('*').eq('status', 'active').limit(50)
+        if (contactsData) setContacts(contactsData as Contact[])
+      } catch (e) {
+        console.error(e)
+      }
+
       if (localStorage.getItem('demoMode') === 'true') {
         setFollowUps(buildDemoData())
       }
       setLoading(false)
-    }, 600)
+    }
+
+    const t = setTimeout(loadData, 300)
     return () => clearTimeout(t)
   }, [])
 
@@ -476,9 +494,14 @@ export default function CalendarPage() {
 
       {/* Upcoming 7 days */}
       <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-indigo-400" />
-          <h2 className="text-lg font-semibold text-white">Proximos 7 dias</h2>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold text-white">Proximos 7 dias</h2>
+          </div>
+          <button onClick={() => setShowNewInteraction(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors">
+            <Plus className="w-3.5 h-3.5" /> Registrar
+          </button>
         </div>
 
         {upcomingGrouped.length === 0 ? (
@@ -545,6 +568,84 @@ export default function CalendarPage() {
           </div>
         )}
       </div>
+
+      {/* New Interaction Modal */}
+      {showNewInteraction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowNewInteraction(false)} />
+          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Registrar Interacción</h2>
+              <button onClick={() => setShowNewInteraction(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Contacto</label>
+                <select value={selectedContact} onChange={e => setSelectedContact(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+                  <option value="">Selecciona un contacto</option>
+                  {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Título</label>
+                <input type="text" value={newInteractionData.title} onChange={e => setNewInteractionData(p => ({ ...p, title: e.target.value }))}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Reunión, Llamada, Café..." />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha</label>
+                <input type="date" value={newInteractionData.date} onChange={e => setNewInteractionData(p => ({ ...p, date: e.target.value }))}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora inicio</label>
+                  <input type="time" value={newInteractionData.startTime} onChange={e => setNewInteractionData(p => ({ ...p, startTime: e.target.value }))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Hora fin</label>
+                  <input type="time" value={newInteractionData.endTime} onChange={e => setNewInteractionData(p => ({ ...p, endTime: e.target.value }))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => setShowNewInteraction(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
+              <button onClick={async () => {
+                if (!selectedContact || !newInteractionData.title.trim()) return alert('Completa los campos')
+                setSavingInteraction(true)
+                try {
+                  const supabase = createClient()
+                  const [sh, sm] = newInteractionData.startTime.split(':')
+                  const [eh, em] = newInteractionData.endTime.split(':')
+                  const startMin = parseInt(sh) * 60 + parseInt(sm)
+                  const endMin = parseInt(eh) * 60 + parseInt(em)
+                  const duration = Math.max(15, endMin - startMin)
+
+                  const { error } = await supabase.from('interactions').insert({
+                    contact_id: selectedContact,
+                    type: 'meeting',
+                    title: newInteractionData.title,
+                    date: newInteractionData.date,
+                    sentiment: 'neutral',
+                    duration_minutes: duration
+                  })
+                  if (error) throw error
+                  alert('Interacción registrada')
+                  setShowNewInteraction(false)
+                  setSelectedContact('')
+                  setNewInteractionData({ title: '', date: new Date().toISOString().split('T')[0], startTime: '09:00', endTime: '10:00' })
+                } catch (e) {
+                  alert('Error: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
+                } finally {
+                  setSavingInteraction(false)
+                }
+              }} disabled={savingInteraction} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{savingInteraction ? 'Guardando...' : 'Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
