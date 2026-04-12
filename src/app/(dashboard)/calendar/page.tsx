@@ -113,6 +113,12 @@ export default function CalendarPage() {
     return acc
   }, {} as Record<string, CalendarInteraction[]>)
 
+  console.log('Calendar: Interactions grouped by date:', interactionsByDate)
+  if (interactions.length > 0) {
+    console.log('Calendar: Sample interaction date:', interactions[0].date, 'type:', typeof interactions[0].date)
+    console.log('Calendar: Today key:', dateKey(today))
+  }
+
   const followUpsByDate = followUps.reduce((acc, fu) => {
     if (!acc[fu.due_date]) acc[fu.due_date] = []
     acc[fu.due_date].push(fu)
@@ -172,10 +178,14 @@ export default function CalendarPage() {
         alert('ERROR AL GUARDAR:\n\nCódigo: ' + error.code + '\nMensaje: ' + error.message + '\n\nRevisa la consola para más detalles')
       } else {
         console.log('Test: Insert success:', data)
-        alert('SUCCESS! La interacción se guardó. Recarga la página para verla en el calendario.')
         // Reload interactions
         const { data: newInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false })
-        if (newInteractions) setInteractions(newInteractions as CalendarInteraction[])
+        console.log('Test: Reloaded interactions:', newInteractions?.length, newInteractions)
+        if (newInteractions) {
+          setInteractions(newInteractions as CalendarInteraction[])
+          console.log('Test: State updated with new interactions')
+        }
+        alert('SUCCESS! La interacción se guardó. Mira arriba en el Calendario ahora.')
       }
     } catch (e) {
       console.error('Test: Exception:', e)
