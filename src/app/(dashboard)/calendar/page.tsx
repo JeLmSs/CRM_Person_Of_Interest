@@ -182,6 +182,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [followUps, setFollowUps] = useState<DemoFollowUp[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [interactions, setInteractions] = useState<any[]>([])
   const today = useMemo(() => new Date(), [])
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
@@ -193,8 +194,12 @@ export default function CalendarPage() {
     const loadData = async () => {
       try {
         const supabase = createClient()
-        const { data: contactsData } = await supabase.from('contacts').select('*').eq('status', 'active').limit(50)
-        if (contactsData) setContacts(contactsData as Contact[])
+        const [contactsRes, interactionsRes] = await Promise.all([
+          supabase.from('contacts').select('*').eq('status', 'active').limit(100),
+          supabase.from('interactions').select('*, contacts(first_name, last_name, company, tier)').order('date', { ascending: false })
+        ])
+        if (contactsRes.data) setContacts(contactsRes.data as Contact[])
+        if (interactionsRes.data) setInteractions(interactionsRes.data)
       } catch (e) {
         console.error(e)
       }
@@ -208,6 +213,29 @@ export default function CalendarPage() {
     const t = setTimeout(loadData, 300)
     return () => clearTimeout(t)
   }, [])
+
+  // Parse YYYY-MM-DD as local date
+  function parseLocalDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+
+  // Interactions indexed by date
+  const interactionsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {}
+    interactions.forEach(i => {
+      const key = parseLocalDate(i.date).toDateString()
+      if (!map[key]) map[key] = []
+      map[key].push(i)
+    })
+    return map
+  }, [interactions])
+
+  const selectedDayInteractions = useMemo(() => interactionsByDate[selectedDate.toDateString()] || [], [interactionsByDate, selectedDate])
+
+  const upcomingInteractions = useMemo(() => {
+    const start = new Date(today); start.setHours(0,0,0,0)
+    const end = new Date(today); end.setDate(end.getDate() + 7); end.setHours(23,59,59,999)
+    return interactions.filter(i => { const d = parseLocalDate(i.date); return d >= start && d <= end })
+      .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime())
+  }, [interactions, today])
 
   // Calendar grid
   const calendarDays = useMemo(() => getCalendarDays(viewYear, viewMonth), [viewYear, viewMonth])
@@ -348,6 +376,7 @@ export default function CalendarPage() {
               }
               const key = date.toDateString()
               const fus = followUpsByDate[key] || []
+              const ints = interactionsByDate[key] || []
               const isToday = isSameDay(date, today)
               const isSelected = isSameDay(date, selectedDate)
               const isCurrentMonth = date.getMonth() === viewMonth
@@ -366,14 +395,14 @@ export default function CalendarPage() {
                   )}
                 >
                   <span className="font-medium">{date.getDate()}</span>
-                  {fus.length > 0 && (
+                  {(fus.length > 0 || ints.length > 0) && (
                     <div className="flex gap-0.5">
-                      {fus.slice(0, 3).map((fu, i) => (
+                      {fus.slice(0, 2).map((fu, i) => (
                         <span key={i} className={cn('w-1.5 h-1.5 rounded-full', tierDotColor(fu.tier))} />
                       ))}
-                      {fus.length > 3 && (
-                        <span className="text-[8px] text-zinc-500">+{fus.length - 3}</span>
-                      )}
+                      {ints.slice(0, 2).map((_, i) => (
+                        <span key={'i'+i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                      ))}
                     </div>
                   )}
                 </button>
@@ -389,13 +418,31 @@ export default function CalendarPage() {
           </h3>
           <p className="text-white font-semibold mb-4">{formatSpanishDate(selectedDate)}</p>
 
-          {selectedFollowUps.length === 0 ? (
+          {selectedFollowUps.length === 0 && selectedDayInteractions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CalendarIcon className="w-10 h-10 text-zinc-700 mb-3" />
-              <p className="text-zinc-500 text-sm">Sin seguimientos para este dia</p>
+              <p className="text-zinc-500 text-sm">Sin eventos para este día</p>
             </div>
           ) : (
             <div className="space-y-3">
+              {selectedDayInteractions.map((i: any) => (
+                <div key={i.id} className="rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-500/20 text-indigo-300">
+                      {getInitials(i.contacts?.first_name || '', i.contacts?.last_name || '')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white font-medium text-sm truncate">{i.title}</p>
+                      <p className="text-xs text-zinc-400">{i.contacts?.first_name} {i.contacts?.last_name}</p>
+                      <p className="text-xs text-zinc-500 truncate">{i.contacts?.company}</p>
+                      {i.description && <p className="text-xs text-zinc-400 mt-1 truncate">{i.description}</p>}
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+                      {i.type}
+                    </span>
+                  </div>
+                </div>
+              ))}
               {selectedFollowUps.map((fu) => (
                 <div
                   key={fu.id}
@@ -501,10 +548,29 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        {upcomingGrouped.length === 0 ? (
-          <p className="text-zinc-500 text-sm py-4">No hay seguimientos pendientes en los proximos 7 dias.</p>
+        {upcomingGrouped.length === 0 && upcomingInteractions.length === 0 ? (
+          <p className="text-zinc-500 text-sm py-4">No hay eventos en los próximos 7 días.</p>
         ) : (
           <div className="space-y-5">
+            {upcomingInteractions.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wide mb-2">Interacciones registradas</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {upcomingInteractions.map((i: any) => (
+                    <div key={i.id} className="flex items-start gap-3 rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-500/20 text-indigo-300">
+                        {getInitials(i.contacts?.first_name || '', i.contacts?.last_name || '')}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white text-sm font-medium truncate">{i.title}</p>
+                        <p className="text-xs text-zinc-400">{i.contacts?.first_name} {i.contacts?.last_name}</p>
+                        <p className="text-xs text-zinc-500">{parseLocalDate(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short' })}{i.duration_minutes ? ` · ${i.duration_minutes}min` : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {upcomingGrouped.map((group) => (
               <div key={group.date.toDateString()}>
                 <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">

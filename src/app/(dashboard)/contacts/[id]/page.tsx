@@ -87,6 +87,7 @@ export default function ContactDetailPage() {
   const { user } = useUser()
   const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'>('timeline')
   const [showInteractionModal, setShowInteractionModal] = useState(false)
+  const [editingInteraction, setEditingInteraction] = useState<any>(null)
   const [showOutcomeModal, setShowOutcomeModal] = useState(false)
   const [contact, setContact] = useState<Contact | null>(null)
   const [interactions, setInteractions] = useState<any[]>([])
@@ -255,13 +256,18 @@ export default function ContactDetailPage() {
                               ))}
                             </div>
                           )}
-                          <button
-                            onClick={() => downloadInteractionICS(i.title, `${c.first_name} ${c.last_name || ''}`.trim(), i.date, startTime, endTime, i.description)}
-                            title="Exportar .ics"
-                            className="mt-2 flex items-center gap-1 text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
-                          >
-                            <Download className="w-3 h-3" /> Exportar .ics
-                          </button>
+                          <div className="mt-2 flex items-center gap-3">
+                            <button onClick={() => downloadInteractionICS(i.title, `${c.first_name} ${c.last_name || ''}`.trim(), i.date, startTime, endTime, i.description)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-indigo-400 transition-colors">
+                              <Download className="w-3 h-3" /> .ics
+                            </button>
+                            <button onClick={() => { setEditingInteraction(i); setShowInteractionModal(true) }} className="text-xs text-zinc-500 hover:text-white transition-colors">Editar</button>
+                            <button onClick={async () => {
+                              if (!confirm('¿Eliminar esta interacción?')) return
+                              const supabase = createClient()
+                              await supabase.from('interactions').delete().eq('id', i.id)
+                              setInteractions(prev => prev.filter(x => x.id !== i.id))
+                            }} className="text-xs text-zinc-500 hover:text-red-400 transition-colors">Eliminar</button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -282,7 +288,10 @@ export default function ContactDetailPage() {
                 <h3 className="text-sm font-semibold text-emerald-400 mb-3">Le interesa</h3>
                 <div className="flex flex-wrap gap-2">
                   {interests.filter(i => i.is_positive).map(i => (
-                    <span key={i.tag_id} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs">{i.tags?.name}</span>
+                    <span key={i.tag_id} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs">
+                      {i.tags?.name}
+                      <button onClick={async () => { const s = createClient(); await s.from('contact_tags').delete().eq('tag_id', i.tag_id).eq('contact_id', c.id); setInterests(p => p.filter(x => x.tag_id !== i.tag_id)) }} className="ml-1 hover:text-red-400">×</button>
+                    </span>
                   ))}
                   {interests.filter(i => i.is_positive).length === 0 && <span className="text-xs text-zinc-500">Sin intereses positivos</span>}
                   <button onClick={() => { setNewInterestPositive(true); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
@@ -292,7 +301,10 @@ export default function ContactDetailPage() {
                 <h3 className="text-sm font-semibold text-red-400 mb-3">No le interesa</h3>
                 <div className="flex flex-wrap gap-2">
                   {interests.filter(i => !i.is_positive).map(i => (
-                    <span key={i.tag_id} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-xs">{i.tags?.name}</span>
+                    <span key={i.tag_id} className="flex items-center gap-1 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-xs">
+                      {i.tags?.name}
+                      <button onClick={async () => { const s = createClient(); await s.from('contact_tags').delete().eq('tag_id', i.tag_id).eq('contact_id', c.id); setInterests(p => p.filter(x => x.tag_id !== i.tag_id)) }} className="ml-1 hover:text-red-300">×</button>
+                    </span>
                   ))}
                   {interests.filter(i => !i.is_positive).length === 0 && <span className="text-xs text-zinc-500">Sin intereses negativos</span>}
                   <button onClick={() => { setNewInterestPositive(false); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
@@ -356,9 +368,10 @@ export default function ContactDetailPage() {
 
       <InteractionModal
         isOpen={showInteractionModal}
-        onClose={() => setShowInteractionModal(false)}
+        onClose={() => { setShowInteractionModal(false); setEditingInteraction(null) }}
         contactId={c.id}
         contactName={`${c.first_name} ${c.last_name || ''}`.trim()}
+        existing={editingInteraction}
         onSaved={async () => {
           const supabase = createClient()
           const { data } = await supabase.from('interactions').select('*').eq('contact_id', c.id).order('date', { ascending: false })

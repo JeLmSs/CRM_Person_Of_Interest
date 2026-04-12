@@ -45,28 +45,34 @@ export function downloadInteractionICS(title: string, contactName: string, date:
 interface InteractionModalProps {
   isOpen: boolean
   onClose: () => void
-  /** Pre-set when opening from contact detail — hides the contact selector */
   contactId?: string
   contactName?: string
-  /** For calendar: list of contacts to pick from */
   contacts?: Contact[]
   defaultDate?: string
+  /** Pass existing interaction to enable edit mode */
+  existing?: any
   onSaved?: () => void
 }
 
-export default function InteractionModal({ isOpen, onClose, contactId, contactName, contacts, defaultDate, onSaved }: InteractionModalProps) {
+function durToEnd(start: string, dur: number) {
+  const [h, m] = start.split(':').map(Number)
+  const end = h * 60 + m + dur
+  return `${String(Math.floor(end / 60)).padStart(2,'0')}:${String(end % 60).padStart(2,'0')}`
+}
+
+export default function InteractionModal({ isOpen, onClose, contactId, contactName, contacts, defaultDate, existing, onSaved }: InteractionModalProps) {
   const { user } = useUser()
   const [saving, setSaving] = useState(false)
   const [savedData, setSavedData] = useState<{ contactName: string; title: string; date: string; startTime: string; endTime: string; description: string } | null>(null)
   const [selectedContactId, setSelectedContactId] = useState(contactId || '')
   const [form, setForm] = useState({
-    type: 'meeting' as InteractionType,
-    title: '',
-    date: defaultDate || new Date().toISOString().split('T')[0],
-    sentiment: 'neutral' as InteractionSentiment,
+    type: (existing?.type || 'meeting') as InteractionType,
+    title: existing?.title || '',
+    date: existing?.date || defaultDate || new Date().toISOString().split('T')[0],
+    sentiment: (existing?.sentiment || 'neutral') as InteractionSentiment,
     startTime: '09:00',
-    endTime: '10:00',
-    description: '',
+    endTime: existing?.duration_minutes ? durToEnd('09:00', existing.duration_minutes) : '10:00',
+    description: existing?.description || '',
   })
 
   if (!isOpen) return null
@@ -81,7 +87,7 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
 
   async function handleSave() {
     const cid = contactId || selectedContactId
-    if (!cid) return alert('Selecciona un contacto')
+    if (!cid && !existing) return alert('Selecciona un contacto')
     if (!form.title.trim()) return alert('Título requerido')
     if (!user) return alert('Sesión no encontrada, recarga la página')
     setSaving(true)
@@ -90,12 +96,13 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
       const [sh, sm] = form.startTime.split(':').map(Number)
       const [eh, em] = form.endTime.split(':').map(Number)
       const duration = Math.max(15, (eh * 60 + em) - (sh * 60 + sm))
-      const { error } = await supabase.from('interactions').insert({
-        user_id: user.id, contact_id: cid,
-        type: form.type, title: form.title, date: form.date,
-        sentiment: form.sentiment, description: form.description || null,
-        duration_minutes: duration,
-      })
+      const payload = { type: form.type, title: form.title, date: form.date, sentiment: form.sentiment, description: form.description || null, duration_minutes: duration }
+      let error
+      if (existing) {
+        ;({ error } = await supabase.from('interactions').update(payload).eq('id', existing.id))
+      } else {
+        ;({ error } = await supabase.from('interactions').insert({ user_id: user.id, contact_id: cid!, ...payload }))
+      }
       if (error) throw error
       const resolvedContact = contacts?.find(c => c.id === cid)
       const resolvedName = contactName || (resolvedContact ? `${resolvedContact.first_name} ${resolvedContact.last_name || ''}`.trim() : '')
@@ -113,7 +120,7 @@ export default function InteractionModal({ isOpen, onClose, contactId, contactNa
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
       <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">{savedData ? 'Interacción guardada' : 'Registrar interacción'}</h2>
+          <h2 className="text-lg font-bold text-white">{savedData ? (existing ? 'Interacción actualizada' : 'Interacción guardada') : (existing ? 'Editar interacción' : 'Registrar interacción')}</h2>
           <button onClick={handleClose} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400"><X className="w-5 h-5" /></button>
         </div>
 
