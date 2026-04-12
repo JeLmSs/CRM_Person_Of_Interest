@@ -80,6 +80,9 @@ export default function ContactDetailPage() {
   const [outcomes, setOutcomes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
+  const [showAddInterest, setShowAddInterest] = useState(false)
+  const [newInterestName, setNewInterestName] = useState('')
+  const [newInterestPositive, setNewInterestPositive] = useState(true)
   const [newInteraction, setNewInteraction] = useState({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30 })
   const [newOutcome, setNewOutcome] = useState({ type:'introduction', title:'', description:'', rating:3 })
 
@@ -247,19 +250,23 @@ export default function ContactDetailPage() {
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-emerald-400 mb-3">Le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {c.interests?.filter((i: any) => i.positive).map((i: any) => (
-                    <span key={i.id} className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">{i.name}</span>
-                  )) || <span className="text-xs text-zinc-500">Sin datos</span>}
-                  <button className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
+                  {c.interests?.filter((i: any) => i.positive).length ?
+                    c.interests.filter((i: any) => i.positive).map((i: any) => (
+                      <span key={i.id} className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">{i.name}</span>
+                    ))
+                  : <span className="text-xs text-zinc-500">Sin datos</span>}
+                  <button onClick={() => { setNewInterestPositive(true); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-red-400 mb-3">No le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {c.interests?.filter((i: any) => !i.positive).map((i: any) => (
-                    <span key={i.id} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full text-xs font-medium">{i.name}</span>
-                  )) || <span className="text-xs text-zinc-500">Sin datos</span>}
-                  <button className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
+                  {c.interests?.filter((i: any) => !i.positive).length ?
+                    c.interests.filter((i: any) => !i.positive).map((i: any) => (
+                      <span key={i.id} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full text-xs font-medium">{i.name}</span>
+                    ))
+                  : <span className="text-xs text-zinc-500">Sin datos</span>}
+                  <button onClick={() => { setNewInterestPositive(false); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
             </div>
@@ -411,6 +418,47 @@ export default function ContactDetailPage() {
                   if (data) setOutcomes(prev => [data, ...prev])
                   setShowOutcomeModal(false)
                   setNewOutcome({ type:'introduction', title:'', description:'', rating:3 })
+                } catch (e) { console.error(e) }
+              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Interest Modal */}
+      {showAddInterest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddInterest(false)} />
+          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Añadir interés</h2>
+              <button onClick={() => setShowAddInterest(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Interés</label>
+                <input type="text" value={newInterestName} onChange={e => setNewInterestName(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Ej: Transformación Digital" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setNewInterestPositive(true)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${newInterestPositive ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>Le interesa</button>
+                  <button onClick={() => setNewInterestPositive(false)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!newInterestPositive ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>No le interesa</button>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => setShowAddInterest(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
+              <button onClick={async () => {
+                if (!newInterestName.trim()) return
+                try {
+                  const supabase = createClient()
+                  await supabase.from('interests').insert({
+                    contact_id: c.id, name: newInterestName, positive: newInterestPositive
+                  })
+                  setShowAddInterest(false)
+                  setNewInterestName('')
                 } catch (e) { console.error(e) }
               }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
             </div>
