@@ -85,7 +85,15 @@ export default function CalendarPage() {
           const { data: interactionsData, error: interactionsError } = await supabase.from('interactions').select('*').order('date', { ascending: false })
           console.log('Calendar: Interactions loaded', interactionsData?.length || 0, interactionsError)
           console.log('Calendar: Interactions raw data:', interactionsData)
-          if (interactionsData) setInteractions(interactionsData as CalendarInteraction[])
+          if (interactionsData) {
+            // Normalize dates to YYYY-MM-DD format
+            const normalized = interactionsData.map(i => ({
+              ...i,
+              date: i.date.split('T')[0] // Convert ISO to YYYY-MM-DD
+            }))
+            console.log('Calendar: Normalized dates:', normalized.map(i => i.date))
+            setInteractions(normalized as CalendarInteraction[])
+          }
 
           // Load follow-ups
           const { data: followUpsData, error: followUpsError } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
