@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
-import { ContactTier, Contact } from '@/lib/types/database'
+import { ContactTier, Contact, InteractionType, InteractionSentiment } from '@/lib/types/database'
 import { useUser } from '@/lib/supabase/hooks'
 import InteractionModal, { downloadInteractionICS } from '@/components/interaction-modal'
 
