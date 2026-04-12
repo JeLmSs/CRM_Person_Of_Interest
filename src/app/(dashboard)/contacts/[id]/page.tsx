@@ -6,6 +6,7 @@ import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, 
 import { createClient } from '@/lib/supabase/client'
 import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
 import { ContactTier, InteractionType, InteractionSentiment, Contact } from '@/lib/types/database'
+import { useUser } from '@/lib/supabase/hooks'
 
 const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada', email:'Email', coffee:'Café', lunch:'Comida', event:'Evento', linkedin:'LinkedIn', whatsapp:'WhatsApp', other:'Otro' }
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
@@ -82,12 +83,14 @@ const demo = {
 
 export default function ContactDetailPage() {
   const { id } = useParams()
+  const { user } = useUser()
   const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'>('timeline')
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [showOutcomeModal, setShowOutcomeModal] = useState(false)
   const [contact, setContact] = useState<Contact | null>(null)
   const [interactions, setInteractions] = useState<any[]>([])
   const [outcomes, setOutcomes] = useState<any[]>([])
+  const [interests, setInterests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
   const [notesSaved, setNotesSaved] = useState(false)
@@ -103,10 +106,11 @@ export default function ContactDetailPage() {
     const fetchData = async () => {
       try {
         const supabase = createClient()
-        const [contactRes, interactionsRes, outcomesRes] = await Promise.all([
+        const [contactRes, interactionsRes, outcomesRes, interestsRes] = await Promise.all([
           supabase.from('contacts').select('*').eq('id', id).single(),
           supabase.from('interactions').select('*').eq('contact_id', id).order('date', { ascending: false }),
-          supabase.from('outcomes').select('*').eq('contact_id', id).order('date', { ascending: false })
+          supabase.from('outcomes').select('*').eq('contact_id', id).order('created_at', { ascending: false }),
+          supabase.from('contact_tags').select('*, tags(*)').eq('contact_id', id)
         ])
 
         if (contactRes.data) {
@@ -115,6 +119,7 @@ export default function ContactDetailPage() {
         }
         if (interactionsRes.data) setInteractions(interactionsRes.data)
         if (outcomesRes.data) setOutcomes(outcomesRes.data)
+        if (interestsRes.data) setInterests(interestsRes.data)
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -211,7 +216,7 @@ export default function ContactDetailPage() {
             {tabs.map(t => (
               <button key={t.k} onClick={() => setTab(t.k as typeof tab)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.k ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
-                <t.icon className="w-4 h-4" />{t.l}
+                <t.icon className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t.l}</span>
               </button>
             ))}
           </div>
@@ -263,14 +268,20 @@ export default function ContactDetailPage() {
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-emerald-400 mb-3">Le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs text-zinc-500">Funcionalidad para agregar intereses</span>
+                  {interests.filter(i => i.is_positive).map(i => (
+                    <span key={i.tag_id} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs">{i.tags?.name}</span>
+                  ))}
+                  {interests.filter(i => i.is_positive).length === 0 && <span className="text-xs text-zinc-500">Sin intereses positivos</span>}
                   <button onClick={() => { setNewInterestPositive(true); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-red-400 mb-3">No le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs text-zinc-500">Funcionalidad para agregar intereses</span>
+                  {interests.filter(i => !i.is_positive).map(i => (
+                    <span key={i.tag_id} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-xs">{i.tags?.name}</span>
+                  ))}
+                  {interests.filter(i => !i.is_positive).length === 0 && <span className="text-xs text-zinc-500">Sin intereses negativos</span>}
                   <button onClick={() => { setNewInterestPositive(false); setShowAddInterest(true) }} className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
@@ -291,9 +302,9 @@ export default function ContactDetailPage() {
                         <span className="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-400 rounded-full">{outcomeTypes.find(ot => ot.v === o.type)?.l}</span>
                         <h3 className="text-sm font-semibold text-white mt-1.5">{o.title}</h3>
                         <p className="text-xs text-zinc-400 mt-1">{o.description}</p>
-                        <p className="text-xs text-zinc-500 mt-1">{new Date(o.date).toLocaleDateString('es-ES')}</p>
+                        <p className="text-xs text-zinc-500 mt-1">{new Date(o.created_at).toLocaleDateString('es-ES')}</p>
                       </div>
-                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= (o.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-zinc-700'}`} />)}</div>
+                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= (o.value_rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-zinc-700'}`} />)}</div>
                     </div>
                   </div>
                 ))
@@ -393,11 +404,12 @@ export default function ContactDetailPage() {
               <button onClick={() => setShowInteractionModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={async () => {
                 if (!newInteraction.title.trim()) return alert('Título requerido')
+                if (!user) return alert('Sesión no encontrada, recarga la página')
                 setSavingInteraction(true)
                 try {
                   const supabase = createClient()
                   const { error } = await supabase.from('interactions').insert({
-                    contact_id: c.id, type: newInteraction.type, title: newInteraction.title,
+                    user_id: user.id, contact_id: c.id, type: newInteraction.type, title: newInteraction.title,
                     date: newInteraction.date, sentiment: newInteraction.sentiment,
                     description: newInteraction.description, duration_minutes: newInteraction.duration_minutes
                   })
@@ -449,17 +461,18 @@ export default function ContactDetailPage() {
               <button onClick={() => setShowOutcomeModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={async () => {
                 if (!newOutcome.title.trim()) return alert('Título requerido')
+                if (!user) return alert('Sesión no encontrada, recarga la página')
                 setSavingOutcome(true)
                 try {
                   const supabase = createClient()
                   const { error } = await supabase.from('outcomes').insert({
-                    contact_id: c.id, type: newOutcome.type, title: newOutcome.title,
-                    description: newOutcome.description, rating: newOutcome.rating, date: new Date().toISOString()
+                    user_id: user.id, contact_id: c.id, type: newOutcome.type, title: newOutcome.title,
+                    description: newOutcome.description, value_rating: newOutcome.rating
                   })
                   if (error) throw error
                   setShowOutcomeModal(false)
                   setNewOutcome({ type:'introduction', title:'', description:'', rating:3 })
-                  const { data } = await supabase.from('outcomes').select('*').eq('contact_id', c.id).order('date', { ascending: false })
+                  const { data } = await supabase.from('outcomes').select('*').eq('contact_id', c.id).order('created_at', { ascending: false })
                   if (data) setOutcomes(data)
                 } catch (e) {
                   console.error(e)
@@ -500,14 +513,25 @@ export default function ContactDetailPage() {
               <button onClick={() => setShowAddInterest(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={async () => {
                 if (!newInterestName.trim()) return
+                if (!user) return alert('Sesión no encontrada, recarga la página')
                 try {
                   const supabase = createClient()
-                  await supabase.from('interests').insert({
-                    contact_id: c.id, name: newInterestName, positive: newInterestPositive
+                  const { data: tag, error: tagError } = await supabase.from('tags').insert({
+                    user_id: user.id, name: newInterestName.trim(), category: 'interest', color: newInterestPositive ? '#10b981' : '#ef4444'
+                  }).select().single()
+                  if (tagError) throw tagError
+                  const { error: ctError } = await supabase.from('contact_tags').insert({
+                    contact_id: c.id, tag_id: tag.id, is_positive: newInterestPositive
                   })
+                  if (ctError) throw ctError
                   setShowAddInterest(false)
                   setNewInterestName('')
-                } catch (e) { console.error(e) }
+                  const { data } = await supabase.from('contact_tags').select('*, tags(*)').eq('contact_id', c.id)
+                  if (data) setInterests(data)
+                } catch (e) {
+                  console.error(e)
+                  alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
+                }
               }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
             </div>
           </div>
