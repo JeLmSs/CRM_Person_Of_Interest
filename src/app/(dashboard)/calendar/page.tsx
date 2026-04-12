@@ -73,15 +73,23 @@ export default function CalendarPage() {
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
+        console.log('Calendar: User logged in?', !!user, user?.id)
 
         if (user) {
-          const { data: contactsData } = await supabase.from('contacts').select('*').eq('status', 'active')
+          // Load contacts
+          const { data: contactsData, error: contactsError } = await supabase.from('contacts').select('*').eq('status', 'active')
+          console.log('Calendar: Contacts loaded', contactsData?.length || 0, contactsError)
           if (contactsData) setContacts(contactsData as Contact[])
 
-          const { data: interactionsData } = await supabase.from('interactions').select('*').order('date', { ascending: false })
+          // Load interactions
+          const { data: interactionsData, error: interactionsError } = await supabase.from('interactions').select('*').order('date', { ascending: false })
+          console.log('Calendar: Interactions loaded', interactionsData?.length || 0, interactionsError)
+          console.log('Calendar: Interactions raw data:', interactionsData)
           if (interactionsData) setInteractions(interactionsData as CalendarInteraction[])
 
-          const { data: followUpsData } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
+          // Load follow-ups
+          const { data: followUpsData, error: followUpsError } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
+          console.log('Calendar: Follow-ups loaded', followUpsData?.length || 0, followUpsError)
           if (followUpsData) {
             const enriched = (followUpsData as any[]).map(fu => ({
               ...fu,
@@ -297,6 +305,12 @@ export default function CalendarPage() {
       </div>
 
       <InteractionModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInteraction(null) }} contacts={contacts} contactId={editingInteraction?.contact_id} defaultDate={editingInteraction?.date || dateKey(selectedDate)} existing={editingInteraction} onSaved={() => { setShowModal(false); setEditingInteraction(null) }} />
+
+      {/* Debug info */}
+      <div className="bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-4 text-xs text-zinc-400 font-mono">
+        <p>Debug: Contacts={contacts.length} | Interactions={interactions.length} | FollowUps={followUps.length}</p>
+        {interactions.length > 0 && <p>First interaction: {interactions[0].date} - {interactions[0].title}</p>}
+      </div>
     </div>
   )
 }
