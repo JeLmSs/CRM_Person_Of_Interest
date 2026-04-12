@@ -1,10 +1,11 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
-import { ContactTier, InteractionType, InteractionSentiment } from '@/lib/types/database'
+import { ContactTier, InteractionType, InteractionSentiment, Contact } from '@/lib/types/database'
 
 const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada', email:'Email', coffee:'Café', lunch:'Comida', event:'Evento', linkedin:'LinkedIn', whatsapp:'WhatsApp', other:'Otro' }
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
@@ -74,11 +75,56 @@ export default function ContactDetailPage() {
   const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'>('timeline')
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [showOutcomeModal, setShowOutcomeModal] = useState(false)
-  const [notes, setNotes] = useState(demo.contact.notes)
+  const [contact, setContact] = useState<Contact | null>(null)
+  const [interactions, setInteractions] = useState<any[]>([])
+  const [outcomes, setOutcomes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [notes, setNotes] = useState('')
   const [newInteraction, setNewInteraction] = useState({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30 })
   const [newOutcome, setNewOutcome] = useState({ type:'introduction', title:'', description:'', rating:3 })
 
-  const c = demo.contact
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const supabase = createClient()
+        const [contactRes, interactionsRes, outcomesRes] = await Promise.all([
+          supabase.from('contacts').select('*').eq('id', id).single(),
+          supabase.from('interactions').select('*').eq('contact_id', id).order('date', { ascending: false }),
+          supabase.from('outcomes').select('*').eq('contact_id', id).order('date', { ascending: false })
+        ])
+
+        if (contactRes.data) {
+          setContact(contactRes.data as Contact)
+          setNotes(contactRes.data.notes || '')
+        }
+        if (interactionsRes.data) setInteractions(interactionsRes.data)
+        if (outcomesRes.data) setOutcomes(outcomesRes.data)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (id) fetchData()
+  }, [id])
+
+  const c = contact || demo.contact
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border border-zinc-800 border-t-indigo-500" />
+      </div>
+    )
+  }
+
+  if (!contact) {
+    return (
+      <div className="p-6">
+        <p className="text-zinc-400">Contacto no encontrado</p>
+      </div>
+    )
+  }
   const tabs = [{ k:'timeline', l:'Timeline', icon: MessageSquare },{ k:'interests', l:'Intereses', icon: Star },{ k:'outcomes', l:'Resultados', icon: Award },{ k:'notes', l:'Notas', icon: FileText }]
 
   return (
@@ -125,11 +171,21 @@ export default function ContactDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-6">
-            {[{ icon: Phone, label: 'Llamar' }, { icon: Mail, label: 'Email' }, { icon: ExternalLink, label: 'LinkedIn' }].map(a => (
-              <button key={a.label} className="flex-1 flex items-center justify-center gap-1 py-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-colors">
-                <a.icon className="w-3.5 h-3.5" />{a.label}
-              </button>
-            ))}
+            {c.phone && (
+              <a href={`tel:${c.phone}`} className="flex-1 flex items-center justify-center gap-1 py-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-colors">
+                <Phone className="w-3.5 h-3.5" /> Llamar
+              </a>
+            )}
+            {c.email && (
+              <a href={`mailto:${c.email}`} className="flex-1 flex items-center justify-center gap-1 py-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-colors">
+                <Mail className="w-3.5 h-3.5" /> Email
+              </a>
+            )}
+            {c.linkedin_url && (
+              <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 rounded-lg text-xs font-medium transition-colors">
+                <ExternalLink className="w-3.5 h-3.5" /> LinkedIn
+              </a>
+            )}
           </div>
         </div>
 
@@ -150,32 +206,38 @@ export default function ContactDetailPage() {
               <button onClick={() => setShowInteractionModal(true)} className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 rounded-xl text-sm font-medium transition-colors">
                 <Plus className="w-4 h-4" /> Registrar interacción
               </button>
-              {demo.interactions.map(i => (
-                <div key={i.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl mt-0.5">{typeIcons[i.type]}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-semibold text-white">{i.title}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>
-                          {sentimentOpts.find(s => s.v === i.sentiment)?.l}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-500 mt-0.5">{typeLabels[i.type]} · {new Date(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} · {i.duration_minutes}min</p>
-                      {i.description && <p className="text-sm text-zinc-300 mt-2">{i.description}</p>}
-                      {i.key_takeaways && i.key_takeaways.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {i.key_takeaways.map((t, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-400">
-                              <ChevronRight className="w-3 h-3 text-indigo-400" />{t}
-                            </div>
-                          ))}
+              {interactions.length > 0 ? (
+                interactions.map(i => (
+                  <div key={i.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="text-2xl mt-0.5">{typeIcons[i.type] || '📌'}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-semibold text-white">{i.title}</h3>
+                          {i.sentiment && <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>
+                            {sentimentOpts.find(s => s.v === i.sentiment)?.l}
+                          </span>}
                         </div>
-                      )}
+                        <p className="text-xs text-zinc-500 mt-0.5">{typeLabels[i.type] || i.type} · {new Date(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} {i.duration_minutes && `· ${i.duration_minutes}min`}</p>
+                        {i.description && <p className="text-sm text-zinc-300 mt-2">{i.description}</p>}
+                        {i.key_takeaways && i.key_takeaways.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {i.key_takeaways.map((t: string, idx: number) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                <ChevronRight className="w-3 h-3 text-indigo-400" />{t}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-8 text-center">
+                  <p className="text-zinc-400 text-sm">No hay interacciones registradas</p>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -185,30 +247,19 @@ export default function ContactDetailPage() {
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-emerald-400 mb-3">Le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {demo.interests.filter(i => i.positive).map(i => (
+                  {c.interests?.filter((i: any) => i.positive).map((i: any) => (
                     <span key={i.id} className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">{i.name}</span>
-                  ))}
+                  )) || <span className="text-xs text-zinc-500">Sin datos</span>}
                   <button className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
                 </div>
               </div>
               <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-red-400 mb-3">No le interesa</h3>
                 <div className="flex flex-wrap gap-2">
-                  {demo.interests.filter(i => !i.positive).map(i => (
+                  {c.interests?.filter((i: any) => !i.positive).map((i: any) => (
                     <span key={i.id} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full text-xs font-medium">{i.name}</span>
-                  ))}
+                  )) || <span className="text-xs text-zinc-500">Sin datos</span>}
                   <button className="px-3 py-1.5 border border-dashed border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500 rounded-full text-xs transition-colors">+ Añadir</button>
-                </div>
-              </div>
-              <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-amber-400 mb-3">Temas de conversación sugeridos</h3>
-                <div className="space-y-2">
-                  {demo.topics.map((t, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-800/30">
-                      <span className="text-sm text-zinc-300">{t}</span>
-                      <button className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors">Usar</button>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -220,19 +271,25 @@ export default function ContactDetailPage() {
               <button onClick={() => setShowOutcomeModal(true)} className="w-full flex items-center justify-center gap-2 py-3 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-400 rounded-xl text-sm font-medium transition-colors">
                 <Plus className="w-4 h-4" /> Añadir resultado
               </button>
-              {demo.outcomes.map(o => (
-                <div key={o.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-400 rounded-full">{outcomeTypes.find(ot => ot.v === o.type)?.l}</span>
-                      <h3 className="text-sm font-semibold text-white mt-1.5">{o.title}</h3>
-                      <p className="text-xs text-zinc-400 mt-1">{o.description}</p>
-                      <p className="text-xs text-zinc-500 mt-1">{new Date(o.date).toLocaleDateString('es-ES')}</p>
+              {outcomes.length > 0 ? (
+                outcomes.map(o => (
+                  <div key={o.id} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-400 rounded-full">{outcomeTypes.find(ot => ot.v === o.type)?.l}</span>
+                        <h3 className="text-sm font-semibold text-white mt-1.5">{o.title}</h3>
+                        <p className="text-xs text-zinc-400 mt-1">{o.description}</p>
+                        <p className="text-xs text-zinc-500 mt-1">{new Date(o.date).toLocaleDateString('es-ES')}</p>
+                      </div>
+                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= (o.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-zinc-700'}`} />)}</div>
                     </div>
-                    <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= o.rating ? 'text-amber-400 fill-amber-400' : 'text-zinc-700'}`} />)}</div>
                   </div>
+                ))
+              ) : (
+                <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-8 text-center">
+                  <p className="text-zinc-400 text-sm">No hay resultados registrados</p>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -242,7 +299,12 @@ export default function ContactDetailPage() {
               <h3 className="text-sm font-semibold text-white mb-3">Notas generales</h3>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={10}
                 className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none" placeholder="Escribe notas sobre este contacto..." />
-              <button className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">Guardar notas</button>
+              <button onClick={async () => {
+                try {
+                  const supabase = createClient()
+                  await supabase.from('contacts').update({ notes }).eq('id', c.id)
+                } catch (e) { console.error(e) }
+              }} className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">Guardar notas</button>
             </div>
           )}
         </div>
@@ -292,7 +354,19 @@ export default function ContactDetailPage() {
             </div>
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowInteractionModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
-              <button className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+              <button onClick={async () => {
+                try {
+                  const supabase = createClient()
+                  const { data } = await supabase.from('interactions').insert({
+                    contact_id: c.id, type: newInteraction.type, title: newInteraction.title,
+                    date: newInteraction.date, sentiment: newInteraction.sentiment,
+                    description: newInteraction.description, duration_minutes: newInteraction.duration_minutes
+                  }).select().single()
+                  if (data) setInteractions(prev => [data, ...prev])
+                  setShowInteractionModal(false)
+                  setNewInteraction({ type:'meeting' as InteractionType, title:'', date: new Date().toISOString().split('T')[0], sentiment:'neutral' as InteractionSentiment, description:'', duration_minutes:30 })
+                } catch (e) { console.error(e) }
+              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
             </div>
           </div>
         </div>
@@ -327,7 +401,18 @@ export default function ContactDetailPage() {
             </div>
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowOutcomeModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
-              <button className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+              <button onClick={async () => {
+                try {
+                  const supabase = createClient()
+                  const { data } = await supabase.from('outcomes').insert({
+                    contact_id: c.id, type: newOutcome.type, title: newOutcome.title,
+                    description: newOutcome.description, rating: newOutcome.rating, date: new Date().toISOString()
+                  }).select().single()
+                  if (data) setOutcomes(prev => [data, ...prev])
+                  setShowOutcomeModal(false)
+                  setNewOutcome({ type:'introduction', title:'', description:'', rating:3 })
+                } catch (e) { console.error(e) }
+              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
             </div>
           </div>
         </div>
