@@ -22,6 +22,7 @@ import InteractionModal from '@/components/interaction-modal'
 // ---------- Types ----------
 interface DemoFollowUp {
   id: string
+  contact_id?: string
   contactName: string
   contactLastName: string
   company: string
@@ -188,24 +189,60 @@ export default function CalendarPage() {
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<Date>(today)
   const [showNewInteraction, setShowNewInteraction] = useState(false)
+  const [planFollowUp, setPlanFollowUp] = useState<DemoFollowUp | null>(null)
 
   // Load contacts and follow-ups
   useEffect(() => {
     const loadData = async () => {
       try {
         const supabase = createClient()
-        const [contactsRes, interactionsRes] = await Promise.all([
+        const [contactsRes, interactionsRes, followUpsRes] = await Promise.all([
           supabase.from('contacts').select('*').eq('status', 'active').limit(100),
-          supabase.from('interactions').select('*, contacts(first_name, last_name, company, tier)').order('date', { ascending: false })
+          supabase.from('interactions').select('*, contacts(first_name, last_name, company, tier)').order('date', { ascending: false }),
+          supabase.from('follow_ups').select('*, contacts(first_name, last_name, company, tier)').not('status', 'in', '("completed","skipped")')
         ])
         if (contactsRes.data) setContacts(contactsRes.data as Contact[])
         if (interactionsRes.data) setInteractions(interactionsRes.data)
+
+        // Real follow_ups from follow_ups table
+        const realFU: DemoFollowUp[] = (followUpsRes.data || []).map((fu: any) => ({
+          id: fu.id,
+          contact_id: fu.contact_id,
+          contactName: fu.contacts?.first_name || '',
+          contactLastName: fu.contacts?.last_name || '',
+          company: fu.contacts?.company || '',
+          tier: (fu.contacts?.tier || 'C') as ContactTier,
+          dueDate: new Date(fu.due_date + 'T12:00:00'),
+          status: fu.status as FollowUpStatus,
+          notes: fu.notes,
+          suggestedTopics: fu.suggested_topics || [],
+        }))
+
+        // Virtual follow_ups from contacts.next_follow_up_date
+        const virtualFU: DemoFollowUp[] = (contactsRes.data || [])
+          .filter((c: any) => c.next_follow_up_date)
+          .filter((c: any) => !realFU.some(f => f.contact_id === c.id))
+          .map((c: any) => ({
+            id: 'vfu-' + c.id,
+            contact_id: c.id,
+            contactName: c.first_name,
+            contactLastName: c.last_name || '',
+            company: c.company || '',
+            tier: c.tier as ContactTier,
+            dueDate: new Date(c.next_follow_up_date + 'T12:00:00'),
+            status: 'pending' as FollowUpStatus,
+            notes: null,
+            suggestedTopics: [],
+          }))
+
+        if (realFU.length > 0 || virtualFU.length > 0) {
+          setFollowUps([...realFU, ...virtualFU])
+        } else if (localStorage.getItem('demoMode') === 'true') {
+          setFollowUps(buildDemoData())
+        }
       } catch (e) {
         console.error(e)
-      }
-
-      if (localStorage.getItem('demoMode') === 'true') {
-        setFollowUps(buildDemoData())
+        if (localStorage.getItem('demoMode') === 'true') setFollowUps(buildDemoData())
       }
       setLoading(false)
     }
@@ -512,6 +549,12 @@ export default function CalendarPage() {
                         <SkipForward className="w-3 h-3" /> Saltar
                       </button>
                       <button
+                        onClick={() => { setPlanFollowUp(fu); setShowNewInteraction(true) }}
+                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
+                      >
+                        <Plus className="w-3 h-3" /> Planificar interacción
+                      </button>
+                      <button
                         onClick={() => downloadFollowUpICS(`${fu.contactName} ${fu.contactLastName}`, fu.company, fu.dueDate, fu.suggestedTopics, fu.notes)}
                         title="Descargar cita (.ics)"
                         className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors border border-indigo-500/20"
@@ -634,9 +677,11 @@ export default function CalendarPage() {
 
       <InteractionModal
         isOpen={showNewInteraction}
-        onClose={() => setShowNewInteraction(false)}
+        onClose={() => { setShowNewInteraction(false); setPlanFollowUp(null) }}
         contacts={contacts}
-        defaultDate={selectedDate.toISOString().split('T')[0]}
+        contactId={planFollowUp?.contact_id}
+        contactName={planFollowUp ? `${planFollowUp.contactName} ${planFollowUp.contactLastName}`.trim() : undefined}
+        defaultDate={planFollowUp ? planFollowUp.dueDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
       />
     </div>
   )

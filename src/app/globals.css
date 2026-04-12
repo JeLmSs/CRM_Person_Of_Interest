@@ -27,7 +27,31 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ─── LIGHT MODE (default) ─── */
 :root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #6366f1;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6366f1;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #475569;
+  --panel: #f1f5f9;
+}
+
+/* ─── DARK MODE ─── */
+html.dark {
   --background: #09090b;
   --foreground: #fafafa;
   --card: #0f0f14;
@@ -46,11 +70,10 @@
   --ring: #6366f1;
   --sidebar: #0c0c10;
   --sidebar-foreground: #a1a1aa;
+  --panel: #0f0f14;
 }
 
-* {
-  border-color: var(--border);
-}
+* { border-color: var(--border); }
 
 body {
   background: var(--background);
@@ -60,64 +83,59 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ─── Map hardcoded dark hex values to semantic CSS vars ─── */
+/* This makes light/dark mode work without changing every component */
+.bg-\[\#09090b\] { background-color: var(--background) !important; }
+.bg-\[\#0f0f14\] { background-color: var(--card) !important; }
+.bg-\[\#0c0c10\] { background-color: var(--sidebar) !important; }
+
+/* In light mode, remap zinc dark utilities */
+:root:not(html.dark) .border-zinc-800\/50,
+:root:not(html.dark) .border-zinc-800\/60,
+:root:not(html.dark) .border-zinc-800 { border-color: var(--border) !important; }
+:root:not(html.dark) .bg-zinc-900\/50 { background-color: var(--secondary) !important; }
+:root:not(html.dark) .bg-zinc-800\/50,
+:root:not(html.dark) .bg-zinc-800\/60,
+:root:not(html.dark) .bg-zinc-800\/40,
+:root:not(html.dark) .bg-zinc-800\/20 { background-color: var(--secondary) !important; }
+:root:not(html.dark) .bg-zinc-800 { background-color: #e2e8f0 !important; }
+:root:not(html.dark) .bg-zinc-900 { background-color: var(--muted) !important; }
+:root:not(html.dark) .hover\:bg-zinc-800:hover { background-color: #e2e8f0 !important; }
+:root:not(html.dark) .text-zinc-400 { color: #475569 !important; }
+:root:not(html.dark) .text-zinc-500 { color: #64748b !important; }
+:root:not(html.dark) .text-zinc-300 { color: #334155 !important; }
+:root:not(html.dark) .text-white { color: var(--foreground) !important; }
+:root:not(html.dark) .bg-black\/60 { background-color: rgba(15,23,42,0.5) !important; }
+:root:not(html.dark) .bg-zinc-700 { background-color: #cbd5e1 !important; }
+:root:not(html.dark) .border-zinc-700\/50 { border-color: #cbd5e1 !important; }
+
 /* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 
 /* Animations */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slide-in-right {
   from { opacity: 0; transform: translateX(16px); }
   to { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-  50% { box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.15); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  50% { box-shadow: 0 0 20px 4px rgba(99,102,241,0.15); }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out;
-}
+.animate-fade-in { animation: fade-in 0.4s ease-out; }
+.animate-slide-in { animation: slide-in-right 0.3s ease-out; }
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
 
-.animate-slide-in {
-  animation: slide-in-right 0.3s ease-out;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-/* Gradient backgrounds */
 .gradient-mesh {
   background:
-    radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
-    radial-gradient(at 80% 80%, rgba(139, 92, 246, 0.06) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(59, 130, 246, 0.04) 0px, transparent 50%);
-}
-
-/* Glass effect */
-.glass {
-  background: rgba(15, 15, 20, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+    radial-gradient(at 20% 20%, rgba(99,102,241,0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(139,92,246,0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(59,130,246,0.04) 0px, transparent 50%);
 }

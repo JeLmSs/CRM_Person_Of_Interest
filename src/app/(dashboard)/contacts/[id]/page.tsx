@@ -8,6 +8,8 @@ import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
 import { ContactTier, Contact, InteractionType, InteractionSentiment } from '@/lib/types/database'
 import { useUser } from '@/lib/supabase/hooks'
 import InteractionModal, { downloadInteractionICS } from '@/components/interaction-modal'
+import EditContactModal from '@/components/edit-contact-modal'
+import { useRouter } from 'next/navigation'
 
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
 const typeLabels: Record<string, string> = { meeting:'Reunión', call:'Llamada', email:'Email', coffee:'Café', lunch:'Comida', event:'Evento', linkedin:'LinkedIn', whatsapp:'WhatsApp', other:'Otro' }
@@ -85,6 +87,9 @@ const demo = {
 export default function ContactDetailPage() {
   const { id } = useParams()
   const { user } = useUser()
+  const router = useRouter()
+  const [showEditContact, setShowEditContact] = useState(false)
+  const [showScoring, setShowScoring] = useState(false)
   const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'>('timeline')
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [editingInteraction, setEditingInteraction] = useState<any>(null)
@@ -156,6 +161,16 @@ export default function ContactDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Profile Card */}
         <div className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-4 md:p-6">
+          <div className="flex justify-end gap-2 mb-2">
+            <button onClick={() => setShowEditContact(true)} className="text-xs px-3 py-1 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">Editar</button>
+            <button onClick={async () => {
+              if (!confirm(`¿Eliminar a ${c.first_name} ${c.last_name || ''}? Esta acción no se puede deshacer.`)) return
+              const supabase = createClient()
+              const { error } = await supabase.from('contacts').delete().eq('id', c.id)
+              if (error) return alert('Error al eliminar: ' + error.message)
+              router.push('/contacts')
+            }} className="text-xs px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors">Eliminar</button>
+          </div>
           <div className="flex flex-col items-center text-center mb-6">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold ${tierConfig[c.tier].bgColor} ${tierConfig[c.tier].color} border-2 mb-3`}>
               {getInitials(c.first_name, c.last_name)}
@@ -167,12 +182,24 @@ export default function ContactDetailPage() {
           </div>
           <div className="mb-6">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-zinc-400">Relationship Score</span>
+              <button onClick={() => setShowScoring(p => !p)} className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                Relationship Score <span className="text-zinc-600">ⓘ</span>
+              </button>
               <span className={`text-sm font-bold ${getRelationshipColor(c.relationship_score)}`}>{c.relationship_score}/100</span>
             </div>
             <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${c.relationship_score}%` }} />
             </div>
+            {showScoring && (
+              <div className="mt-2 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg text-xs text-zinc-400 space-y-1">
+                <p className="font-medium text-zinc-300 mb-1">Cómo se calcula:</p>
+                <p>• <strong className="text-zinc-300">Recencia</strong> (30%) — Días desde la última interacción</p>
+                <p>• <strong className="text-zinc-300">Frecuencia</strong> (25%) — N.º de interacciones en los últimos 90 días</p>
+                <p>• <strong className="text-zinc-300">Sentimiento</strong> (20%) — Media del tono de las interacciones</p>
+                <p>• <strong className="text-zinc-300">Tier</strong> (15%) — S=100, A=80, B=60, C=40, D=20</p>
+                <p>• <strong className="text-zinc-300">Seguimientos</strong> (10%) — Ratio de seguimientos completados</p>
+              </div>
+            )}
           </div>
           <div className="space-y-3 text-sm">
             {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-2 text-zinc-300 hover:text-indigo-400 transition-colors"><Mail className="w-4 h-4 text-zinc-500" />{c.email}</a>}
@@ -241,9 +268,10 @@ export default function ContactDetailPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-sm font-semibold text-white">{i.title}</h3>
-                            {i.sentiment && <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>
-                              {sentimentOpts.find(s => s.v === i.sentiment)?.l}
-                            </span>}
+                            {new Date(i.date) > new Date()
+                              ? <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">Planificada</span>
+                              : i.sentiment && <span className={`text-xs px-2 py-0.5 rounded-full ${sentimentOpts.find(s => s.v === i.sentiment)?.c}`}>{sentimentOpts.find(s => s.v === i.sentiment)?.l}</span>
+                            }
                           </div>
                           <p className="text-xs text-zinc-500 mt-0.5">{typeLabels[i.type] || i.type} · {new Date(i.date).toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} {i.duration_minutes && `· ${i.duration_minutes}min`}</p>
                           {i.description && <p className="text-sm text-zinc-300 mt-2">{i.description}</p>}
@@ -485,6 +513,15 @@ export default function ContactDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showEditContact && contact && (
+        <EditContactModal
+          contact={contact}
+          isOpen={showEditContact}
+          onClose={() => setShowEditContact(false)}
+          onSaved={(updated) => { setContact(updated); setNotes(updated.notes || '') }}
+        />
       )}
     </div>
   )

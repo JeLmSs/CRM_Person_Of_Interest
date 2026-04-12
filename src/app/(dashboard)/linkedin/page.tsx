@@ -127,6 +127,13 @@ export default function LinkedInPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
+      {/* Dev warning banner */}
+      <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-sm text-amber-300">
+        <Info className="w-4 h-4 mt-0.5 shrink-0" />
+        <div>
+          <strong className="font-semibold">Función en desarrollo</strong> — Los datos mostrados en esta sección son de demo y no reflejan información real de LinkedIn. La integración real está pendiente de activación.
+        </div>
+      </div>
       <div className="flex items-center gap-3">
         <div className="p-2 bg-blue-500/10 rounded-lg"><Link2 className="w-6 h-6 text-blue-400" /></div>
         <div>

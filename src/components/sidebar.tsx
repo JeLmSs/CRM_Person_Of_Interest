@@ -13,9 +13,12 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/supabase/hooks'
+import { useTheme } from '@/contexts/theme-context'
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', badge: '3' },
@@ -36,6 +39,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const router = useRouter()
   const supabase = createClient()
   const { user } = useUser()
+  const { theme, toggle: toggleTheme } = useTheme()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -176,6 +180,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             )
           })}
         </nav>
+
+        {/* Theme toggle */}
+        <div className="px-3 pb-2">
+          <button
+            onClick={toggleTheme}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${collapsed ? 'lg:justify-center' : ''} text-zinc-400 hover:text-white hover:bg-zinc-800`}
+            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
+            <span className={`whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:opacity-0 lg:w-0 lg:overflow-hidden' : ''}`}>
+              {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            </span>
+          </button>
+        </div>
 
         {/* Bottom section - User info + Logout */}
         <div className="shrink-0 border-t border-zinc-800/60 p-3">
