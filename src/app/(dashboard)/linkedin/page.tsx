@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { Link2, Search, UserPlus, TrendingUp, Sparkles, Globe, Building, MapPin, Briefcase, ArrowRight, Info } from 'lucide-react'
+import { Link2, Search, UserPlus, TrendingUp, Sparkles, Globe, Building, MapPin, Briefcase, ArrowRight, Info, Check } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { Contact, ContactTier } from '@/lib/types/database'
 
 const recommendations = [
   { name:'María Rodríguez', headline:'VP de Estrategia Digital', company:'Repsol', location:'Madrid', reason:'Conectada con 3 de tus contactos Tier S', match:95 },
@@ -22,11 +24,105 @@ export default function LinkedInPage() {
   const [profileUrl, setProfileUrl] = useState('')
   const [analyzed, setAnalyzed] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [profileData, setProfileData] = useState<{ name?: string; firstName?: string; lastName?: string; headline?: string; company?: string; location?: string; url: string } | null>(null)
+  const [addingContact, setAddingContact] = useState(false)
+  const [addedContact, setAddedContact] = useState(false)
+  const [addedRecommendations, setAddedRecommendations] = useState<Set<string>>(new Set())
+
+  const extractLinkedInProfile = (url: string) => {
+    try {
+      const match = url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-]+)/)
+      if (match) {
+        const slug = match[1]
+        const parts = slug.split('-')
+        const firstName = parts[0]?.charAt(0).toUpperCase() + parts[0]?.slice(1)
+        const lastName = parts.length > 1 ? parts[parts.length - 1]?.charAt(0).toUpperCase() + parts[parts.length - 1]?.slice(1) : ''
+        return { firstName, lastName, url }
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
 
   const handleAnalyze = () => {
     if (!profileUrl) return
     setAnalyzing(true)
-    setTimeout(() => { setAnalyzing(false); setAnalyzed(true) }, 1500)
+    const extracted = extractLinkedInProfile(profileUrl)
+    setTimeout(() => {
+      setAnalyzing(false)
+      if (extracted) {
+        setProfileData({
+          firstName: extracted.firstName,
+          lastName: extracted.lastName,
+          headline: 'Director de Transformación Digital',
+          company: 'Naturgy',
+          location: 'Madrid, España',
+          url: profileUrl
+        })
+        setAnalyzed(true)
+        setAddedContact(false)
+      }
+    }, 800)
+  }
+
+  const handleAddContact = async () => {
+    if (!profileData) return
+    setAddingContact(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && profileData.firstName) {
+        const { data } = await supabase.from('contacts').insert({
+          user_id: user.id,
+          first_name: profileData.firstName,
+          last_name: profileData.lastName || null,
+          email: null,
+          phone: null,
+          company: profileData.company || null,
+          job_title: profileData.headline || null,
+          linkedin_url: profileData.url,
+          tier: 'B' as ContactTier,
+          follow_up_frequency: 'monthly',
+          city: profileData.location?.split(',')[0] || null,
+          country: 'España'
+        }).select().single()
+        if (data) setAddedContact(true)
+      }
+    } catch (e) {
+      console.error('Error adding contact:', e)
+    }
+    setAddingContact(false)
+  }
+
+  const handleAddRecommendation = async (name: string) => {
+    if (addedRecommendations.has(name)) return
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const parts = name.split(' ')
+        const firstName = parts[0]
+        const lastName = parts.slice(1).join(' ')
+        await supabase.from('contacts').insert({
+          user_id: user.id,
+          first_name: firstName,
+          last_name: lastName || null,
+          email: null,
+          phone: null,
+          company: null,
+          job_title: null,
+          linkedin_url: null,
+          tier: 'C' as ContactTier,
+          follow_up_frequency: 'monthly',
+          city: null,
+          country: 'España'
+        })
+        setAddedRecommendations(prev => new Set([...prev, name]))
+      }
+    } catch (e) {
+      console.error('Error adding recommendation:', e)
+    }
   }
 
   return (
@@ -59,26 +155,29 @@ export default function LinkedInPage() {
             {analyzing ? 'Analizando...' : 'Analizar'}
           </button>
         </div>
-        {analyzed && (
+        {analyzed && profileData && (
           <div className="mt-4 p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-xl animate-fade-in">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-lg font-bold text-blue-400">DR</div>
+              <div className="w-14 h-14 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-lg font-bold text-blue-400">
+                {(profileData.firstName?.[0] || 'L') + (profileData.lastName?.[0] || 'I')}
+              </div>
               <div className="flex-1">
-                <h3 className="text-base font-semibold text-white">David Romero</h3>
-                <p className="text-sm text-zinc-400">Director de Transformación Digital en Naturgy</p>
-                <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />Madrid, España</p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {['Transformación Digital','Energía','Innovación','Liderazgo','Sostenibilidad'].map(s => (
-                    <span key={s} className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded-full text-xs">{s}</span>
-                  ))}
-                </div>
+                <h3 className="text-base font-semibold text-white">{profileData.firstName} {profileData.lastName || ''}</h3>
+                <p className="text-sm text-zinc-400">{profileData.headline} en {profileData.company}</p>
+                <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{profileData.location}</p>
                 <div className="flex items-center gap-3 mt-3">
-                  <span className="text-xs px-2 py-1 bg-amber-500/10 text-amber-400 rounded border border-amber-500/20 font-bold">Tier sugerido: A</span>
-                  <span className="text-xs text-zinc-500">Compatibilidad: 87%</span>
+                  <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-400 rounded">LinkedIn Profile</span>
+                  <a href={profileData.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">Ver perfil</a>
                 </div>
-                <button className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
-                  <UserPlus className="w-4 h-4" />Añadir como contacto
-                </button>
+                {addedContact ? (
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm font-medium">
+                    <Check className="w-4 h-4" />Contacto añadido
+                  </div>
+                ) : (
+                  <button onClick={handleAddContact} disabled={addingContact} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+                    <UserPlus className="w-4 h-4" />{addingContact ? 'Añadiendo...' : 'Añadir como contacto'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -102,7 +201,13 @@ export default function LinkedInPage() {
                   <p className="text-xs text-indigo-400 mt-2 flex items-center gap-1"><Sparkles className="w-3 h-3" />{r.reason}</p>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-xs text-zinc-500">Match: {r.match}%</span>
-                    <button className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">Añadir <ArrowRight className="w-3 h-3" /></button>
+                    {addedRecommendations.has(r.name) ? (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Añadido
+                      </span>
+                    ) : (
+                      <button onClick={() => handleAddRecommendation(r.name)} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">Añadir <ArrowRight className="w-3 h-3" /></button>
+                    )}
                   </div>
                 </div>
               </div>
