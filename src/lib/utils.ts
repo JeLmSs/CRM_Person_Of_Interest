@@ -71,10 +71,19 @@ export function formatRelativeDate(dateStr: string): string {
 
   if (diffDays === 0) return 'Hoy'
   if (diffDays === 1) return 'Ayer'
-  if (diffDays < 7) return `Hace ${diffDays} días`
-  if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} semanas`
-  if (diffDays < 365) return `Hace ${Math.floor(diffDays / 30)} meses`
-  return `Hace ${Math.floor(diffDays / 365)} años`
+  if (diffDays > 0) {
+    if (diffDays < 7) return `Hace ${diffDays} días`
+    if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} semanas`
+    if (diffDays < 365) return `Hace ${Math.floor(diffDays / 30)} meses`
+    return `Hace ${Math.floor(diffDays / 365)} años`
+  }
+  // Future dates
+  const futureDays = Math.abs(diffDays)
+  if (futureDays === 1) return 'Mañana'
+  if (futureDays < 7) return `En ${futureDays} días`
+  if (futureDays < 30) return `En ${Math.floor(futureDays / 7)} semanas`
+  if (futureDays < 365) return `En ${Math.floor(futureDays / 30)} meses`
+  return `En ${Math.floor(futureDays / 365)} años`
 }
 
 export function getInitials(firstName: string, lastName?: string | null): string {
