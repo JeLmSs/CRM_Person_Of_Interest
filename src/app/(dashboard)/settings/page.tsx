@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/supabase/hooks'
 import { Profile, ContactTier, FollowUpFrequency } from '@/lib/types/database'
+import { setDemoMode } from '@/lib/supabase/data-loaders'
 import {
   User,
   Save,
@@ -64,7 +65,9 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   // Demo mode
-  const [demoMode, setDemoMode] = useState(false)
+  const [demoMode, setDemoModeState] = useState(false)
+  const [demoModeLoading, setDemoModeLoading] = useState(false)
+  const [demoModeMessage, setDemoModeMessage] = useState('')
 
   // Export states
   const [exportingContacts, setExportingContacts] = useState(false)
@@ -91,6 +94,8 @@ export default function SettingsPage() {
         setCompany(p.company || '')
         setLinkedinUrl(p.linkedin_url || '')
         setTimezone(p.timezone || 'America/Mexico_City')
+        // Load demo mode from database
+        setDemoModeState((p as any).demo_mode || false)
       }
 
       setContactCount(contactsRes.count || 0)
@@ -101,15 +106,30 @@ export default function SettingsPage() {
     fetchData()
   }, [user, supabase])
 
-  // Read demo mode from localStorage on mount
-  useEffect(() => {
-    setDemoMode(localStorage.getItem('demoMode') === 'true')
-  }, [])
+  const handleToggleDemoMode = useCallback(async (enabled: boolean) => {
+    if (!user) return
 
-  const handleToggleDemoMode = useCallback((enabled: boolean) => {
-    setDemoMode(enabled)
-    localStorage.setItem('demoMode', String(enabled))
-  }, [])
+    setDemoModeLoading(true)
+    setDemoModeMessage('')
+
+    try {
+      const success = await setDemoMode(user.id, enabled)
+      if (success) {
+        setDemoModeState(enabled)
+        setDemoModeMessage(enabled ? 'Modo demo activado' : 'Modo demo desactivado')
+        setTimeout(() => setDemoModeMessage(''), 2000)
+        // Reload page to fetch demo data
+        window.location.reload()
+      } else {
+        setDemoModeMessage('Error al cambiar modo demo')
+      }
+    } catch (error) {
+      console.error('Error toggling demo mode:', error)
+      setDemoModeMessage('Error al cambiar modo demo')
+    } finally {
+      setDemoModeLoading(false)
+    }
+  }, [user])
 
   // Save profile
   const handleSave = useCallback(async () => {
@@ -531,26 +551,34 @@ export default function SettingsPage() {
         </div>
 
         {/* Demo Mode Toggle */}
-        <div className="mt-5 flex items-center justify-between rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Database className="h-4 w-4 text-zinc-400" />
-            <div>
-              <p className="text-sm font-medium text-zinc-200">Datos de demostración</p>
-              <p className="text-xs text-zinc-500">Muestra contactos e interacciones de ejemplo cuando no hay datos reales</p>
+        <div className="mt-5 space-y-2">
+          <div className="flex items-center justify-between rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Database className="h-4 w-4 text-zinc-400" />
+              <div>
+                <p className="text-sm font-medium text-zinc-200">Modo de demostración</p>
+                <p className="text-xs text-zinc-500">Muestra datos de ejemplo realistas para presentaciones</p>
+              </div>
             </div>
+            <button
+              onClick={() => handleToggleDemoMode(!demoMode)}
+              disabled={demoModeLoading}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                demoMode ? 'bg-indigo-600' : 'bg-zinc-700'
+              } ${demoModeLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  demoMode ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
-          <button
-            onClick={() => handleToggleDemoMode(!demoMode)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-              demoMode ? 'bg-indigo-600' : 'bg-zinc-700'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                demoMode ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          {demoModeMessage && (
+            <p className={`text-xs ${demoModeMessage.includes('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+              {demoModeMessage}
+            </p>
+          )}
         </div>
 
         {/* Export Buttons */}
