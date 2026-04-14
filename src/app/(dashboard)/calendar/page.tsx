@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn, tierConfig, getInitials } from '@/lib/utils'
 import { Contact } from '@/lib/types/database'
 import InteractionModal from '@/components/interaction-modal'
+import { loadContacts, loadInteractions, loadFollowUps } from '@/lib/supabase/data-loaders'
 
 interface CalendarInteraction {
   id: string
@@ -56,26 +57,15 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-// Generate consistent color for contact ID
-function getContactColor(contactId: string): { bg: string; text: string; border: string } {
-  const colors = [
-    { bg: 'bg-red-400', text: 'text-red-400', border: 'border-red-800/30' },
-    { bg: 'bg-orange-400', text: 'text-orange-400', border: 'border-orange-800/30' },
-    { bg: 'bg-amber-400', text: 'text-amber-400', border: 'border-amber-800/30' },
-    { bg: 'bg-yellow-400', text: 'text-yellow-400', border: 'border-yellow-800/30' },
-    { bg: 'bg-lime-400', text: 'text-lime-400', border: 'border-lime-800/30' },
-    { bg: 'bg-emerald-400', text: 'text-emerald-400', border: 'border-emerald-800/30' },
-    { bg: 'bg-teal-400', text: 'text-teal-400', border: 'border-teal-800/30' },
-    { bg: 'bg-cyan-400', text: 'text-cyan-400', border: 'border-cyan-800/30' },
-    { bg: 'bg-blue-400', text: 'text-blue-400', border: 'border-blue-800/30' },
-    { bg: 'bg-indigo-400', text: 'text-indigo-400', border: 'border-indigo-800/30' },
-    { bg: 'bg-violet-400', text: 'text-violet-400', border: 'border-violet-800/30' },
-    { bg: 'bg-purple-400', text: 'text-purple-400', border: 'border-purple-800/30' },
-    { bg: 'bg-pink-400', text: 'text-pink-400', border: 'border-pink-800/30' },
-    { bg: 'bg-rose-400', text: 'text-rose-400', border: 'border-rose-800/30' }
-  ]
-  const hash = contactId.charCodeAt(0) + contactId.charCodeAt(contactId.length - 1)
-  return colors[hash % colors.length]
+function tierDotColor(tier: string): string {
+  const map: Record<string, string> = {
+    S: 'bg-amber-400',
+    A: 'bg-violet-400',
+    B: 'bg-blue-400',
+    C: 'bg-emerald-400',
+    D: 'bg-zinc-400',
+  }
+  return map[tier] || 'bg-zinc-400'
 }
 
 export default function CalendarPage() {
@@ -95,36 +85,31 @@ export default function CalendarPage() {
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        console.log('Calendar: User logged in?', !!user, user?.id)
 
         if (user) {
-          // Load contacts
-          const { data: contactsData, error: contactsError } = await supabase.from('contacts').select('*').eq('status', 'active')
-          console.log('Calendar: Contacts loaded', contactsData?.length || 0, contactsError)
-          if (contactsData) setContacts(contactsData as Contact[])
+          // Use new data loaders that check demo mode
+          const contactsData = await loadContacts(user.id)
+          setContacts(contactsData.filter(c => c.status === 'active') as Contact[])
 
-          // Load interactions
-          const { data: interactionsData, error: interactionsError } = await supabase.from('interactions').select('*').order('date', { ascending: false })
-          console.log('Calendar: Interactions loaded', interactionsData?.length || 0, interactionsError)
-          console.log('Calendar: Interactions raw data:', interactionsData)
+          // Load interactions and normalize dates
+          const interactionsData = await loadInteractions(user.id)
           if (interactionsData) {
-            // Normalize dates to YYYY-MM-DD format
             const normalized = interactionsData.map(i => ({
               ...i,
               date: i.date.split('T')[0] // Convert ISO to YYYY-MM-DD
             }))
-            console.log('Calendar: Normalized dates:', normalized.map(i => i.date))
             setInteractions(normalized as CalendarInteraction[])
           }
 
           // Load follow-ups
-          const { data: followUpsData, error: followUpsError } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
-          console.log('Calendar: Follow-ups loaded', followUpsData?.length || 0, followUpsError)
+          const followUpsData = await loadFollowUps(user.id)
           if (followUpsData) {
-            const enriched = (followUpsData as any[]).map(fu => ({
-              ...fu,
-              contact: contactsData?.find(c => c.id === fu.contact_id)
-            }))
+            const enriched = (followUpsData as any[])
+              .filter(fu => fu.status !== 'completed' && fu.status !== 'skipped')
+              .map(fu => ({
+                ...fu,
+                contact: contactsData?.find(c => c.id === fu.contact_id)
+              }))
             setFollowUps(enriched)
           }
         }
@@ -142,12 +127,6 @@ export default function CalendarPage() {
     acc[i.date].push(i)
     return acc
   }, {} as Record<string, CalendarInteraction[]>)
-
-  console.log('Calendar: Interactions grouped by date:', interactionsByDate)
-  if (interactions.length > 0) {
-    console.log('Calendar: Sample interaction date:', interactions[0].date, 'type:', typeof interactions[0].date)
-    console.log('Calendar: Today key:', dateKey(today))
-  }
 
   const followUpsByDate = followUps.reduce((acc, fu) => {
     if (!acc[fu.due_date]) acc[fu.due_date] = []
@@ -225,8 +204,14 @@ export default function CalendarPage() {
                   <span className="text-xs">{date.getDate()}</span>
                   {(ints.length > 0 || fus.length > 0) && (
                     <div className="flex gap-0.5">
-                      {ints.slice(0, 2).map((i, idx) => <span key={`int${idx}`} className={cn('w-1.5 h-1.5 rounded-full', getContactColor(i.contact_id).bg)} />)}
-                      {fus.slice(0, 2).map((f, idx) => <span key={`fu${idx}`} className={cn('w-1.5 h-1.5 rounded-full border border-current opacity-60', getContactColor(f.contact_id || '').bg)} />)}
+                      {fus.slice(0, 2).map((fu, i) => {
+                        const contact = contacts.find(c => c.id === fu.contact_id)
+                        return <span key={`fu${i}`} className={`w-1.5 h-1.5 rounded-full ${tierDotColor(contact?.tier || 'D')}`} />
+                      })}
+                      {ints.slice(0, 2).map((int, i) => {
+                        const contact = contacts.find(c => c.id === int.contact_id)
+                        return <span key={`int${i}`} className={`w-1.5 h-1.5 rounded-full ${tierDotColor(contact?.tier || 'D')}`} />
+                      })}
                     </div>
                   )}
                 </button>
@@ -244,15 +229,14 @@ export default function CalendarPage() {
             <div className="space-y-3">
               {dayInteractions.map(i => {
                 const contact = getContactInfo(i.contact_id)
-                const color = getContactColor(i.contact_id)
                 return (
-                  <div key={i.id} className={cn('rounded-lg border p-3', color.border, 'bg-zinc-900/10')}>
+                  <div key={i.id} className="rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-white font-medium text-sm truncate">{i.title}</p>
-                        <p className={cn('text-xs', color.text)}>{contact?.first_name} {contact?.last_name}</p>
+                        <p className="text-xs text-zinc-400">{contact?.first_name} {contact?.last_name}</p>
                       </div>
-                      <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className={cn('p-1 text-zinc-400 hover:text-white shrink-0')} >
+                      <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
                         <Edit2 className="w-3 h-3" />
                       </button>
                     </div>
@@ -296,18 +280,17 @@ export default function CalendarPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {upcomingInteractions.map(i => {
                     const contact = getContactInfo(i.contact_id)
-                    const color = getContactColor(i.contact_id)
                     return (
-                      <div key={i.id} className={cn('flex items-start gap-2 rounded-lg border p-3', color.border, 'bg-zinc-900/10')}>
-                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0', color.bg + ' bg-opacity-20')}>
+                      <div key={i.id} className="flex items-start gap-2 rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-indigo-500/20 text-indigo-300 shrink-0">
                           {getInitials(contact?.first_name || '', contact?.last_name || '')}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-white text-sm font-medium truncate">{i.title}</p>
-                          <p className={cn('text-xs', color.text)}>{contact?.first_name}</p>
+                          <p className="text-xs text-zinc-400">{contact?.first_name}</p>
                           <p className="text-[10px] text-zinc-500">{i.date}</p>
                         </div>
-                        <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-white shrink-0">
+                        <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -342,26 +325,7 @@ export default function CalendarPage() {
         )}
       </div>
 
-      <InteractionModal
-        isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingInteraction(null) }}
-        contacts={contacts}
-        contactId={editingInteraction?.contact_id}
-        defaultDate={editingInteraction?.date || dateKey(selectedDate)}
-        existing={editingInteraction}
-        onSaved={async () => {
-          // Reload interactions after save
-          const supabase = createClient()
-          const { data: newInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false })
-          if (newInteractions) {
-            console.log('Calendar: Reloaded interactions after save:', newInteractions.length)
-            setInteractions(newInteractions as CalendarInteraction[])
-          }
-          setShowModal(false)
-          setEditingInteraction(null)
-        }}
-      />
-
+      <InteractionModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInteraction(null) }} contacts={contacts} contactId={editingInteraction?.contact_id} defaultDate={editingInteraction?.date || dateKey(selectedDate)} existing={editingInteraction} onSaved={() => { setShowModal(false); setEditingInteraction(null) }} />
     </div>
   )
 }
