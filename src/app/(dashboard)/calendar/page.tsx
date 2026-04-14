@@ -57,6 +57,17 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
+function tierDotColor(tier: string): string {
+  const map: Record<string, string> = {
+    S: 'bg-amber-400',
+    A: 'bg-violet-400',
+    B: 'bg-blue-400',
+    C: 'bg-emerald-400',
+    D: 'bg-zinc-400',
+  }
+  return map[tier] || 'bg-zinc-400'
+}
+
 export default function CalendarPage() {
   const today = new Date()
   const [loading, setLoading] = useState(true)
@@ -193,8 +204,14 @@ export default function CalendarPage() {
                   <span className="text-xs">{date.getDate()}</span>
                   {(ints.length > 0 || fus.length > 0) && (
                     <div className="flex gap-0.5">
-                      {fus.slice(0, 2).map((_, i) => <span key={`fu${i}`} className="w-1.5 h-1.5 rounded-full bg-amber-400" />)}
-                      {ints.slice(0, 2).map((_, i) => <span key={`int${i}`} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
+                      {fus.slice(0, 2).map((fu, i) => {
+                        const contact = contacts.find(c => c.id === fu.contact_id)
+                        return <span key={`fu${i}`} className={`w-1.5 h-1.5 rounded-full ${tierDotColor(contact?.tier || 'D')}`} />
+                      })}
+                      {ints.slice(0, 2).map((int, i) => {
+                        const contact = contacts.find(c => c.id === int.contact_id)
+                        return <span key={`int${i}`} className={`w-1.5 h-1.5 rounded-full ${tierDotColor(contact?.tier || 'D')}`} />
+                      })}
                     </div>
                   )}
                 </button>
