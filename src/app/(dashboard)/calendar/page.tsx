@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn, tierConfig, getInitials } from '@/lib/utils'
 import { Contact } from '@/lib/types/database'
 import InteractionModal from '@/components/interaction-modal'
+import { loadContacts, loadInteractions, loadFollowUps } from '@/lib/supabase/data-loaders'
 
 interface CalendarInteraction {
   id: string
@@ -75,18 +76,29 @@ export default function CalendarPage() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
-          const { data: contactsData } = await supabase.from('contacts').select('*').eq('status', 'active')
-          if (contactsData) setContacts(contactsData as Contact[])
+          // Use new data loaders that check demo mode
+          const contactsData = await loadContacts(user.id)
+          setContacts(contactsData.filter(c => c.status === 'active') as Contact[])
 
-          const { data: interactionsData } = await supabase.from('interactions').select('*').order('date', { ascending: false })
-          if (interactionsData) setInteractions(interactionsData as CalendarInteraction[])
-
-          const { data: followUpsData } = await supabase.from('follow_ups').select('*').not('status', 'in', '("completed","skipped")')
-          if (followUpsData) {
-            const enriched = (followUpsData as any[]).map(fu => ({
-              ...fu,
-              contact: contactsData?.find(c => c.id === fu.contact_id)
+          // Load interactions and normalize dates
+          const interactionsData = await loadInteractions(user.id)
+          if (interactionsData) {
+            const normalized = interactionsData.map(i => ({
+              ...i,
+              date: i.date.split('T')[0] // Convert ISO to YYYY-MM-DD
             }))
+            setInteractions(normalized as CalendarInteraction[])
+          }
+
+          // Load follow-ups
+          const followUpsData = await loadFollowUps(user.id)
+          if (followUpsData) {
+            const enriched = (followUpsData as any[])
+              .filter(fu => fu.status !== 'completed' && fu.status !== 'skipped')
+              .map(fu => ({
+                ...fu,
+                contact: contactsData?.find(c => c.id === fu.contact_id)
+              }))
             setFollowUps(enriched)
           }
         }

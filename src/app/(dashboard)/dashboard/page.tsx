@@ -6,6 +6,7 @@ import { Contact, Interaction, FollowUp } from '@/lib/types/database'
 import { tierConfig, getRelationshipColor, getDaysUntilFollowUp, getFollowUpUrgency, formatRelativeDate, getInitials } from '@/lib/utils'
 import { Users, Clock, MessageSquare, TrendingUp, Plus, ChevronRight, Phone, Mail, ExternalLink, Calendar, ArrowUpRight, Zap } from 'lucide-react'
 import Link from 'next/link'
+import { loadContacts, loadInteractions } from '@/lib/supabase/data-loaders'
 
 const demoContacts: (Contact & { _followUpDays?: number })[] = [
   { id: '1', user_id: '', first_name: 'Carlos', last_name: 'Mendoza', email: 'carlos@empresa.com', phone: '+34 612 345 678', company: 'Iberdrola', job_title: 'Director de Innovación', linkedin_url: null, linkedin_profile_data: null, avatar_url: null, tier: 'S', status: 'active', follow_up_frequency: 'weekly', custom_follow_up_days: null, last_contact_date: new Date(Date.now() - 3 * 86400000).toISOString(), next_follow_up_date: new Date(Date.now() - 1 * 86400000).toISOString(), relationship_score: 92, city: 'Madrid', country: 'España', referred_by: null, notes: null, created_at: '', updated_at: '', _followUpDays: -1 },
@@ -42,7 +43,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const isDemoMode = localStorage.getItem('demoMode') === 'true'
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
@@ -50,32 +50,22 @@ export default function DashboardPage() {
           const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
           if (profile?.full_name) setUserName(profile.full_name.split(' ')[0])
 
-          const { data: dbContacts } = await supabase.from('contacts').select('*').eq('status', 'active').order('tier', { ascending: true })
-          if (dbContacts && dbContacts.length > 0) {
-            setContacts(dbContacts as typeof demoContacts)
-          } else if (isDemoMode) {
-            setContacts(demoContacts)
-          }
+          // Use new data loaders that check demo mode
+          const dbContacts = await loadContacts(user.id)
+          const loadedInteractions = await loadInteractions(user.id)
 
-          const { data: dbInteractions } = await supabase.from('interactions').select('*').order('date', { ascending: false }).limit(5)
-          if (dbInteractions && dbInteractions.length > 0) {
-            const enriched = await Promise.all(dbInteractions.map(async (i) => {
-              const contact = (dbContacts || []).find(c => c.id === i.contact_id)
+          setContacts(dbContacts.filter(c => c.status === 'active') as typeof demoContacts)
+
+          if (loadedInteractions && loadedInteractions.length > 0) {
+            const enriched = loadedInteractions.slice(0, 5).map((i) => {
+              const contact = dbContacts.find(c => c.id === i.contact_id)
               return { ...i, _contactName: contact ? `${contact.first_name} ${contact.last_name || ''}`.trim() : 'Contacto' }
-            }))
+            })
             setInteractions(enriched as typeof demoInteractions)
-          } else if (isDemoMode) {
-            setInteractions(demoInteractions)
           }
-        } else if (isDemoMode) {
-          setContacts(demoContacts)
-          setInteractions(demoInteractions)
         }
-      } catch {
-        if (isDemoMode) {
-          setContacts(demoContacts)
-          setInteractions(demoInteractions)
-        }
+      } catch (error) {
+        console.error('Error loading dashboard data:', error)
       }
       setLoading(false)
     }

@@ -6,6 +6,7 @@ import { Contact, ContactTier, ContactStatus } from '@/lib/types/database'
 import { tierConfig, getRelationshipColor, getDaysUntilFollowUp, getFollowUpUrgency, getInitials, formatRelativeDate } from '@/lib/utils'
 import { Plus, Search, LayoutGrid, List, X, Users, Phone, Mail, ExternalLink, ChevronDown, ArrowUpDown } from 'lucide-react'
 import Link from 'next/link'
+import { loadContacts } from '@/lib/supabase/data-loaders'
 
 const demoContacts: Contact[] = [
   { id: '1', user_id: '', first_name: 'Carlos', last_name: 'Mendoza', email: 'carlos@iberdrola.com', phone: '+34 612 345 678', company: 'Iberdrola', job_title: 'Director de Innovación', linkedin_url: 'https://linkedin.com/in/carlosmendoza', linkedin_profile_data: null, avatar_url: null, tier: 'S', status: 'active', follow_up_frequency: 'weekly', custom_follow_up_days: null, last_contact_date: new Date(Date.now() - 3 * 86400000).toISOString(), next_follow_up_date: new Date(Date.now() - 1 * 86400000).toISOString(), relationship_score: 92, city: 'Madrid', country: 'España', referred_by: null, notes: 'Contacto clave en energía renovable', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -40,17 +41,18 @@ export default function ContactsPage() {
 
   useEffect(() => {
     const fetchContacts = async () => {
-      const isDemoMode = localStorage.getItem('demoMode') === 'true'
       try {
         const supabase = createClient()
-        const { data } = await supabase.from('contacts').select('*').order('created_at', { ascending: false })
-        if (data && data.length > 0) {
-          setContacts(data)
-        } else if (isDemoMode) {
-          setContacts(demoContacts)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          // Use new data loader that checks demo mode
+          const data = await loadContacts(user.id)
+          if (data && data.length > 0) {
+            setContacts(data)
+          }
         }
-      } catch {
-        if (isDemoMode) setContacts(demoContacts)
+      } catch (error) {
+        console.error('Error loading contacts:', error)
       }
       setLoading(false)
     }
