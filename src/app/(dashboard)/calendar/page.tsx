@@ -68,6 +68,17 @@ function tierDotColor(tier: string): string {
   return map[tier] || 'bg-zinc-400'
 }
 
+function getInteractionCardColors(tier?: string): { border: string; bg: string; text: string; hover: string } {
+  const tierMap: Record<string, { border: string; bg: string; text: string; hover: string }> = {
+    S: { border: 'border-amber-800/30', bg: 'bg-amber-900/10', text: 'text-amber-300', hover: 'hover:text-amber-200' },
+    A: { border: 'border-violet-800/30', bg: 'bg-violet-900/10', text: 'text-violet-300', hover: 'hover:text-violet-200' },
+    B: { border: 'border-blue-800/30', bg: 'bg-blue-900/10', text: 'text-blue-300', hover: 'hover:text-blue-200' },
+    C: { border: 'border-emerald-800/30', bg: 'bg-emerald-900/10', text: 'text-emerald-300', hover: 'hover:text-emerald-200' },
+    D: { border: 'border-zinc-800/30', bg: 'bg-zinc-900/10', text: 'text-zinc-300', hover: 'hover:text-zinc-200' },
+  }
+  return tierMap[tier || 'C'] || tierMap['C']
+}
+
 export default function CalendarPage() {
   const today = new Date()
   const [loading, setLoading] = useState(true)
@@ -229,14 +240,15 @@ export default function CalendarPage() {
             <div className="space-y-3">
               {dayInteractions.map(i => {
                 const contact = getContactInfo(i.contact_id)
+                const colors = getInteractionCardColors(contact?.tier)
                 return (
-                  <div key={i.id} className="rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
+                  <div key={i.id} className={cn('rounded-lg border p-3', colors.border, colors.bg)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-white font-medium text-sm truncate">{i.title}</p>
                         <p className="text-xs text-zinc-400">{contact?.first_name} {contact?.last_name}</p>
                       </div>
-                      <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
+                      <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className={cn('p-1 text-zinc-400 shrink-0', colors.text, colors.hover)}>
                         <Edit2 className="w-3 h-3" />
                       </button>
                     </div>
@@ -280,9 +292,10 @@ export default function CalendarPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {upcomingInteractions.map(i => {
                     const contact = getContactInfo(i.contact_id)
+                    const colors = getInteractionCardColors(contact?.tier)
                     return (
-                      <div key={i.id} className="flex items-start gap-2 rounded-lg border border-indigo-800/30 bg-indigo-900/10 p-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-indigo-500/20 text-indigo-300 shrink-0">
+                      <div key={i.id} className={cn('flex items-start gap-2 rounded-lg border p-3', colors.border, colors.bg)}>
+                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', tierConfig[contact?.tier || 'C'].bgColor, tierConfig[contact?.tier || 'C'].color)}>
                           {getInitials(contact?.first_name || '', contact?.last_name || '')}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -290,7 +303,7 @@ export default function CalendarPage() {
                           <p className="text-xs text-zinc-400">{contact?.first_name}</p>
                           <p className="text-[10px] text-zinc-500">{i.date}</p>
                         </div>
-                        <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className="p-1 text-zinc-400 hover:text-indigo-300 shrink-0">
+                        <button onClick={() => { setEditingInteraction(i); setShowModal(true) }} className={cn('p-1 text-zinc-400 shrink-0', colors.text, colors.hover)}>
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
