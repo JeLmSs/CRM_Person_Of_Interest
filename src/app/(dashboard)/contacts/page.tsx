@@ -39,6 +39,9 @@ export default function ContactsPage() {
   const [showModal, setShowModal] = useState(false)
   const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', phone: '', company: '', job_title: '', linkedin_url: '', tier: 'B' as ContactTier, follow_up_frequency: 'monthly', city: '', country: '', notes: '' })
   const [saving, setSaving] = useState(false)
+  const [pendingWork, setPendingWork] = useState<{ company: string; job_title: string; start_date: string; end_date: string; is_current: boolean }[]>([])
+  const [showWorkForm, setShowWorkForm] = useState(false)
+  const [newWork, setNewWork] = useState({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
 
   useEffect(() => {
     const fetchContacts = async () => {
@@ -104,6 +107,7 @@ export default function ContactsPage() {
   }
 
   const handleSaveContact = async () => {
+    if (!formData.first_name.trim()) return alert('El nombre es obligatorio')
     setSaving(true)
     try {
       const supabase = createClient()
@@ -116,12 +120,31 @@ export default function ContactsPage() {
           tier: formData.tier, follow_up_frequency: formData.follow_up_frequency,
           city: formData.city || null, country: formData.country || null, notes: formData.notes || null,
         }).select().single()
-        if (data) setContacts(prev => [data as Contact, ...prev])
+        if (data) {
+          setContacts(prev => [data as Contact, ...prev])
+          // Save pending work history entries
+          if (pendingWork.length > 0) {
+            await supabase.from('work_history').insert(
+              pendingWork.map(w => ({
+                user_id: user.id,
+                contact_id: (data as Contact).id,
+                company: w.company,
+                job_title: w.job_title || null,
+                start_date: w.start_date || null,
+                end_date: w.is_current ? null : (w.end_date || null),
+                is_current: w.is_current,
+              }))
+            )
+          }
+        }
       }
     } catch { /* handle error */ }
     setSaving(false)
     setShowModal(false)
     setFormData({ first_name: '', last_name: '', email: '', phone: '', company: '', job_title: '', linkedin_url: '', tier: 'B', follow_up_frequency: 'monthly', city: '', country: '', notes: '' })
+    setPendingWork([])
+    setShowWorkForm(false)
+    setNewWork({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
   }
 
   if (loading) {
@@ -296,14 +319,26 @@ export default function ContactsPage() {
               <h2 className="text-xl font-bold text-white">Nuevo contacto</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
             </div>
-            {'contacts' in navigator && (
-              <button
-                onClick={handleImportFromContacts}
-                className="w-full flex items-center justify-center gap-2 mb-4 py-2.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500/40 text-indigo-400 hover:text-indigo-300 rounded-xl text-sm font-medium transition-colors"
-              >
-                <BookUser className="w-4 h-4" />
-                Importar desde agenda del móvil
-              </button>
+            {'contacts' in navigator ? (
+              <div className="mb-4">
+                <button
+                  onClick={handleImportFromContacts}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500/40 text-indigo-400 hover:text-indigo-300 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <BookUser className="w-4 h-4" />
+                  Importar desde agenda del móvil
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4 flex items-start gap-2 px-3 py-2.5 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+                <BookUser className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-zinc-500">
+                  <span className="text-zinc-400 font-medium">Importar desde agenda</span> — disponible en{' '}
+                  <span className="text-zinc-300">Chrome Android</span> y{' '}
+                  <span className="text-zinc-300">Safari iOS 14.5+</span>.{' '}
+                  No compatible con Brave, Firefox ni navegadores de escritorio.
+                </p>
+              </div>
             )}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -379,6 +414,71 @@ export default function ContactsPage() {
                 <label className="block text-sm font-medium text-zinc-300 mb-1">Notas</label>
                 <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} rows={3}
                   className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none" placeholder="Notas sobre este contacto..." />
+              </div>
+
+              {/* Work History */}
+              <div className="border-t border-zinc-800 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-zinc-300">Empresas anteriores</label>
+                  <button type="button" onClick={() => setShowWorkForm(p => !p)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                    {showWorkForm ? 'Cancelar' : '+ Añadir'}
+                  </button>
+                </div>
+                {pendingWork.length > 0 && (
+                  <div className="space-y-1.5 mb-2">
+                    {pendingWork.map((w, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-zinc-900/40 rounded-lg text-xs">
+                        <div>
+                          <span className="text-zinc-200 font-medium">{w.job_title || '—'}</span>
+                          <span className="text-zinc-500"> en {w.company}</span>
+                          {w.start_date && <span className="text-zinc-600 ml-1">({new Date(w.start_date).getFullYear()}{w.is_current ? '→hoy' : w.end_date ? `→${new Date(w.end_date).getFullYear()}` : ''})</span>}
+                        </div>
+                        <button type="button" onClick={() => setPendingWork(p => p.filter((_, j) => j !== i))} className="text-zinc-600 hover:text-red-400 ml-2">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showWorkForm && (
+                  <div className="space-y-2 p-3 bg-zinc-900/40 rounded-lg border border-zinc-800">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Empresa *</label>
+                        <input value={newWork.company} onChange={e => setNewWork(p => ({ ...p, company: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Empresa" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Cargo</label>
+                        <input value={newWork.job_title} onChange={e => setNewWork(p => ({ ...p, job_title: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Cargo" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Inicio</label>
+                        <input type="date" value={newWork.start_date} onChange={e => setNewWork(p => ({ ...p, start_date: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Fin</label>
+                        <input type="date" value={newWork.end_date} onChange={e => setNewWork(p => ({ ...p, end_date: e.target.value }))} disabled={newWork.is_current}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-40" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={newWork.is_current} onChange={e => setNewWork(p => ({ ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date }))} className="w-3.5 h-3.5" />
+                      <span className="text-xs text-zinc-400">Trabajo actual</span>
+                    </label>
+                    <button type="button" onClick={() => {
+                      if (!newWork.company.trim()) return
+                      setPendingWork(p => [...p, { ...newWork }])
+                      setNewWork({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
+                      setShowWorkForm(false)
+                    }} className="w-full py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-400 rounded-lg text-xs font-medium transition-colors">
+                      Añadir empresa
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 mt-6">

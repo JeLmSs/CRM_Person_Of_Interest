@@ -1,8 +1,8 @@
 'use client'
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, ChevronDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { Contact, ContactTier, FollowUpFrequency } from '@/lib/types/database'
+import { Contact, ContactTier, FollowUpFrequency, WorkHistory } from '@/lib/types/database'
 
 const tierOptions: ContactTier[] = ['S', 'A', 'B', 'C', 'D']
 const freqOptions: { v: FollowUpFrequency; l: string }[] = [
@@ -38,10 +38,49 @@ export default function EditContactModal({ contact, isOpen, onClose, onSaved }: 
     next_follow_up_date: contact.next_follow_up_date ? contact.next_follow_up_date.split('T')[0] : '',
   })
 
+  // Work history state
+  const [workHistory, setWorkHistory] = useState<WorkHistory[]>([])
+  const [showWorkSection, setShowWorkSection] = useState(false)
+  const [showNewWorkForm, setShowNewWorkForm] = useState(false)
+  const [newWork, setNewWork] = useState({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('work_history').select('*').eq('contact_id', contact.id).order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setWorkHistory(data as WorkHistory[]) })
+  }, [contact.id])
+
   if (!isOpen) return null
 
   const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }))
+
+  async function handleAddWork() {
+    if (!newWork.company.trim()) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data, error } = await supabase.from('work_history').insert({
+      user_id: user.id,
+      contact_id: contact.id,
+      company: newWork.company.trim(),
+      job_title: newWork.job_title.trim() || null,
+      start_date: newWork.start_date || null,
+      end_date: newWork.is_current ? null : (newWork.end_date || null),
+      is_current: newWork.is_current,
+    }).select().single()
+    if (!error && data) {
+      setWorkHistory(prev => [data as WorkHistory, ...prev])
+      setNewWork({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
+      setShowNewWorkForm(false)
+    }
+  }
+
+  async function handleDeleteWork(id: string) {
+    const supabase = createClient()
+    await supabase.from('work_history').delete().eq('id', id)
+    setWorkHistory(prev => prev.filter(w => w.id !== id))
+  }
 
   async function handleSave() {
     if (!form.first_name.trim()) return alert('El nombre es obligatorio')
@@ -73,7 +112,7 @@ export default function EditContactModal({ contact, isOpen, onClose, onSaved }: 
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50'
+  const inputCls = 'w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white'
   const labelCls = 'block text-xs font-medium text-zinc-400 mb-1'
 
   return (
@@ -94,8 +133,8 @@ export default function EditContactModal({ contact, isOpen, onClose, onSaved }: 
             <div><label className={labelCls}>Teléfono</label><input value={form.phone} onChange={f('phone')} className={inputCls} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={labelCls}>Empresa</label><input value={form.company} onChange={f('company')} className={inputCls} /></div>
-            <div><label className={labelCls}>Cargo</label><input value={form.job_title} onChange={f('job_title')} className={inputCls} /></div>
+            <div><label className={labelCls}>Empresa actual</label><input value={form.company} onChange={f('company')} className={inputCls} /></div>
+            <div><label className={labelCls}>Cargo actual</label><input value={form.job_title} onChange={f('job_title')} className={inputCls} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={labelCls}>Ciudad</label><input value={form.city} onChange={f('city')} className={inputCls} /></div>
@@ -117,7 +156,81 @@ export default function EditContactModal({ contact, isOpen, onClose, onSaved }: 
             </div>
           </div>
           <div><label className={labelCls}>Próximo seguimiento</label><input type="date" value={form.next_follow_up_date} onChange={f('next_follow_up_date')} className={inputCls} /></div>
+
+          {/* Work History Section */}
+          <div className="border-t border-zinc-800 pt-3">
+            <button type="button" onClick={() => setShowWorkSection(p => !p)}
+              className="w-full flex items-center justify-between text-xs font-medium text-zinc-400 hover:text-white transition-colors mb-2">
+              <span>Empresas anteriores ({workHistory.length})</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showWorkSection ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showWorkSection && (
+              <div className="space-y-2">
+                {workHistory.map(w => (
+                  <div key={w.id} className="flex items-start justify-between gap-2 px-3 py-2 bg-zinc-900/40 rounded-lg">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-zinc-200 truncate">{w.job_title || '—'}</p>
+                      <p className="text-xs text-zinc-400 truncate">{w.company}</p>
+                      {(w.start_date || w.end_date || w.is_current) && (
+                        <p className="text-xs text-zinc-600 mt-0.5">
+                          {w.start_date ? new Date(w.start_date).getFullYear() : '?'} →{' '}
+                          {w.is_current ? 'actualidad' : w.end_date ? new Date(w.end_date).getFullYear() : '?'}
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => handleDeleteWork(w.id)} className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {!showNewWorkForm ? (
+                  <button type="button" onClick={() => setShowNewWorkForm(true)}
+                    className="w-full py-1.5 border border-dashed border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-white rounded-lg text-xs transition-colors">
+                    + Añadir empresa anterior
+                  </button>
+                ) : (
+                  <div className="space-y-2 p-3 bg-zinc-900/40 rounded-lg border border-zinc-800">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Empresa *</label>
+                        <input value={newWork.company} onChange={e => setNewWork(p => ({ ...p, company: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Empresa" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Cargo</label>
+                        <input value={newWork.job_title} onChange={e => setNewWork(p => ({ ...p, job_title: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Cargo" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Inicio</label>
+                        <input type="date" value={newWork.start_date} onChange={e => setNewWork(p => ({ ...p, start_date: e.target.value }))}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Fin</label>
+                        <input type="date" value={newWork.end_date} onChange={e => setNewWork(p => ({ ...p, end_date: e.target.value }))} disabled={newWork.is_current}
+                          className="w-full px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-40" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={newWork.is_current} onChange={e => setNewWork(p => ({ ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date }))} className="w-3.5 h-3.5" />
+                      <span className="text-xs text-zinc-400">Trabajo actual</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setShowNewWorkForm(false)} className="flex-1 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors">Cancelar</button>
+                      <button type="button" onClick={handleAddWork} className="flex-1 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-400 rounded-lg text-xs font-medium transition-colors">Añadir</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
         <div className="flex justify-end gap-3 mt-5">
           <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
           <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
