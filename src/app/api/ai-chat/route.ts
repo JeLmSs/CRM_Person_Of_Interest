@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
 const GUARDRAILS = `
 RESTRICCIONES ABSOLUTAS E INNEGOCIABLES:
