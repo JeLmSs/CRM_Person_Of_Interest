@@ -125,24 +125,29 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Contactos activos', value: totalActive, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-          { label: 'Seguimientos pendientes', value: overdueCount, icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-          { label: 'Interacciones recientes', value: interactions.length, icon: MessageSquare, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-          { label: 'Score medio', value: avgScore, icon: TrendingUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5 hover:border-zinc-700/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className={`p-2 rounded-lg ${stat.bg}`}>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+          { label: 'Contactos activos', value: totalActive, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/contacts' },
+          { label: 'Seguimientos pendientes', value: overdueCount, icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10', href: null },
+          { label: 'Interacciones recientes', value: interactions.length, icon: MessageSquare, color: 'text-emerald-400', bg: 'bg-emerald-500/10', href: null },
+          { label: 'Score medio', value: avgScore, icon: TrendingUp, color: 'text-violet-400', bg: 'bg-violet-500/10', href: null },
+        ].map((stat) => {
+          const card = (
+            <div key={stat.label} className={`bg-[#0f0f14] border border-zinc-800/50 rounded-xl p-5 transition-colors ${stat.href ? 'hover:border-indigo-500/40 cursor-pointer' : 'hover:border-zinc-700/50'}`}>
+              <div className="flex items-center justify-between">
+                <div className={`p-2 rounded-lg ${stat.bg}`}>
+                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                </div>
+                {stat.label === 'Seguimientos pendientes' && overdueCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">Urgente</span>
+                )}
               </div>
-              {stat.label === 'Seguimientos pendientes' && overdueCount > 0 && (
-                <span className="px-2 py-0.5 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">Urgente</span>
-              )}
+              <p className="text-3xl font-bold text-white mt-3">{stat.value}</p>
+              <p className="text-sm text-zinc-400 mt-1">{stat.label}</p>
             </div>
-            <p className="text-3xl font-bold text-white mt-3">{stat.value}</p>
-            <p className="text-sm text-zinc-400 mt-1">{stat.label}</p>
-          </div>
-        ))}
+          )
+          return stat.href
+            ? <Link key={stat.label} href={stat.href}>{card}</Link>
+            : card
+        })}
       </div>
 
       {/* Main Grid */}

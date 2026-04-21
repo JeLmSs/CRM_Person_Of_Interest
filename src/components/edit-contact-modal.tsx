@@ -11,6 +11,7 @@ const freqOptions: { v: FollowUpFrequency; l: string }[] = [
   { v: 'biweekly', l: 'Quincenal' },
   { v: 'monthly', l: 'Mensual' },
   { v: 'quarterly', l: 'Trimestral' },
+  { v: 'annually', l: 'Anual (ej. felicitar Navidad)' },
 ]
 
 interface Props {

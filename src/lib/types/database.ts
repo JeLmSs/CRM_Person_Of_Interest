@@ -1,6 +1,6 @@
 export type ContactTier = 'S' | 'A' | 'B' | 'C' | 'D'
 export type ContactStatus = 'active' | 'dormant' | 'archived'
-export type FollowUpFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'custom'
+export type FollowUpFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually' | 'custom'
 export type InteractionType = 'meeting' | 'call' | 'email' | 'coffee' | 'lunch' | 'event' | 'linkedin' | 'whatsapp' | 'other'
 export type InteractionSentiment = 'very_positive' | 'positive' | 'neutral' | 'negative' | 'very_negative'
 export type FollowUpStatus = 'pending' | 'completed' | 'skipped' | 'overdue'
@@ -113,6 +113,28 @@ export interface ConversationTopic {
   created_at: string
 }
 
+export interface WorkHistory {
+  id: string
+  user_id: string
+  contact_id: string
+  company: string
+  job_title: string | null
+  start_date: string | null
+  end_date: string | null
+  is_current: boolean
+  notes: string | null
+  created_at: string
+}
+
+export interface AiConversation {
+  id: string
+  user_id: string
+  contact_id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
 // Supabase Database type
 export interface Database {
   public: {
@@ -163,6 +185,18 @@ export interface Database {
         Row: ConversationTopic
         Insert: Omit<Partial<ConversationTopic> & { user_id: string; contact_id: string; topic: string }, 'id' | 'created_at'>
         Update: Partial<ConversationTopic>
+        Relationships: []
+      }
+      work_history: {
+        Row: WorkHistory
+        Insert: Omit<Partial<WorkHistory> & { user_id: string; contact_id: string; company: string }, 'id' | 'created_at'>
+        Update: Partial<WorkHistory>
+        Relationships: []
+      }
+      ai_conversations: {
+        Row: AiConversation
+        Insert: Omit<Partial<AiConversation> & { user_id: string; contact_id: string; role: 'user' | 'assistant'; content: string }, 'id' | 'created_at'>
+        Update: Partial<AiConversation>
         Relationships: []
       }
     }

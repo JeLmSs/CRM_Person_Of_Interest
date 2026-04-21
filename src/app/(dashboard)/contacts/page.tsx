@@ -25,6 +25,7 @@ const tierOrder: ContactTier[] = ['S', 'A', 'B', 'C', 'D']
 const frequencyOptions = [
   { value: 'daily', label: 'Diario' }, { value: 'weekly', label: 'Semanal' }, { value: 'biweekly', label: 'Quincenal' },
   { value: 'monthly', label: 'Mensual' }, { value: 'quarterly', label: 'Trimestral' },
+  { value: 'annually', label: 'Anual (ej. felicitar Navidad)' },
 ]
 
 export default function ContactsPage() {

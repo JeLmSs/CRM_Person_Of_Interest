@@ -28,6 +28,7 @@ export const frequencyConfig: Record<FollowUpFrequency, { label: string; days: n
   biweekly: { label: 'Quincenal', days: 14 },
   monthly: { label: 'Mensual', days: 30 },
   quarterly: { label: 'Trimestral', days: 90 },
+  annually: { label: 'Anual', days: 365 },
   custom: { label: 'Personalizado', days: 0 },
 }
 

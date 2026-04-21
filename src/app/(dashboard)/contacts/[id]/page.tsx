@@ -2,13 +2,14 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download } from 'lucide-react'
+import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Building, Star, Plus, X, Calendar, Clock, MessageSquare, Award, FileText, ChevronRight, Download, Briefcase, Sparkles, ChevronDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { tierConfig, getRelationshipColor, getInitials } from '@/lib/utils'
-import { ContactTier, Contact, InteractionType, InteractionSentiment } from '@/lib/types/database'
+import { tierConfig, getRelationshipColor, getInitials, frequencyConfig } from '@/lib/utils'
+import { ContactTier, Contact, InteractionType, InteractionSentiment, WorkHistory } from '@/lib/types/database'
 import { useUser } from '@/lib/supabase/hooks'
 import InteractionModal, { downloadInteractionICS } from '@/components/interaction-modal'
 import EditContactModal from '@/components/edit-contact-modal'
+import ContactAIChat from '@/components/contact-ai-chat'
 import { useRouter } from 'next/navigation'
 
 const typeIcons: Record<string, string> = { meeting:'🤝', call:'📞', email:'📧', coffee:'☕', lunch:'🍽️', event:'🎫', linkedin:'💼', whatsapp:'💬', other:'📌' }
@@ -90,7 +91,7 @@ export default function ContactDetailPage() {
   const router = useRouter()
   const [showEditContact, setShowEditContact] = useState(false)
   const [showScoring, setShowScoring] = useState(false)
-  const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'>('timeline')
+  const [tab, setTab] = useState<'timeline'|'interests'|'outcomes'|'notes'|'ia'>('timeline')
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [editingInteraction, setEditingInteraction] = useState<any>(null)
   const [showOutcomeModal, setShowOutcomeModal] = useState(false)
@@ -98,6 +99,10 @@ export default function ContactDetailPage() {
   const [interactions, setInteractions] = useState<any[]>([])
   const [outcomes, setOutcomes] = useState<any[]>([])
   const [interests, setInterests] = useState<any[]>([])
+  const [workHistory, setWorkHistory] = useState<WorkHistory[]>([])
+  const [showWorkHistory, setShowWorkHistory] = useState(false)
+  const [showAddWork, setShowAddWork] = useState(false)
+  const [newWork, setNewWork] = useState({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
   const [notesSaved, setNotesSaved] = useState(false)
@@ -111,11 +116,12 @@ export default function ContactDetailPage() {
     const fetchData = async () => {
       try {
         const supabase = createClient()
-        const [contactRes, interactionsRes, outcomesRes, interestsRes] = await Promise.all([
+        const [contactRes, interactionsRes, outcomesRes, interestsRes, workRes] = await Promise.all([
           supabase.from('contacts').select('*').eq('id', id).single(),
           supabase.from('interactions').select('*').eq('contact_id', id).order('date', { ascending: false }),
           supabase.from('outcomes').select('*').eq('contact_id', id).order('created_at', { ascending: false }),
-          supabase.from('contact_tags').select('*, tags(*)').eq('contact_id', id)
+          supabase.from('contact_tags').select('*, tags(*)').eq('contact_id', id),
+          supabase.from('work_history').select('*').eq('contact_id', id).order('created_at', { ascending: false }),
         ])
 
         if (contactRes.data) {
@@ -125,6 +131,7 @@ export default function ContactDetailPage() {
         if (interactionsRes.data) setInteractions(interactionsRes.data)
         if (outcomesRes.data) setOutcomes(outcomesRes.data)
         if (interestsRes.data) setInterests(interestsRes.data)
+        if (workRes.data) setWorkHistory(workRes.data as WorkHistory[])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -151,7 +158,7 @@ export default function ContactDetailPage() {
       </div>
     )
   }
-  const tabs = [{ k:'timeline', l:'Timeline', icon: MessageSquare },{ k:'interests', l:'Intereses', icon: Star },{ k:'outcomes', l:'Resultados', icon: Award },{ k:'notes', l:'Notas', icon: FileText }]
+  const tabs = [{ k:'timeline', l:'Timeline', icon: MessageSquare },{ k:'interests', l:'Intereses', icon: Star },{ k:'outcomes', l:'Resultados', icon: Award },{ k:'notes', l:'Notas', icon: FileText },{ k:'ia', l:'IA', icon: Sparkles }]
 
   return (
     <div className="p-4 md:p-6 animate-fade-in">
@@ -192,12 +199,11 @@ export default function ContactDetailPage() {
             </div>
             {showScoring && (
               <div className="mt-2 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg text-xs text-zinc-400 space-y-1">
-                <p className="font-medium text-zinc-300 mb-1">Cómo se calcula:</p>
-                <p>• <strong className="text-zinc-300">Recencia</strong> (30%) — Días desde la última interacción</p>
-                <p>• <strong className="text-zinc-300">Frecuencia</strong> (25%) — N.º de interacciones en los últimos 90 días</p>
-                <p>• <strong className="text-zinc-300">Sentimiento</strong> (20%) — Media del tono de las interacciones</p>
-                <p>• <strong className="text-zinc-300">Tier</strong> (15%) — S=100, A=80, B=60, C=40, D=20</p>
-                <p>• <strong className="text-zinc-300">Seguimientos</strong> (10%) — Ratio de seguimientos completados</p>
+                <p className="font-medium text-zinc-300 mb-1">Cómo se calcula (empieza en 0):</p>
+                <p>• <strong className="text-zinc-300">Perfil completo</strong> (0-25 pts) — Email, teléfono, empresa, cargo, LinkedIn, ciudad</p>
+                <p>• <strong className="text-zinc-300">Frecuencia</strong> (0-35 pts) — Interacciones en los últimos 90 días (+7 por cada una)</p>
+                <p>• <strong className="text-zinc-300">Recencia</strong> (0-25 pts) — Cuándo fue el último contacto</p>
+                <p>• <strong className="text-zinc-300">Sentimiento</strong> (0-15 pts) — Interacciones positivas recientes</p>
               </div>
             )}
           </div>
@@ -206,7 +212,7 @@ export default function ContactDetailPage() {
             {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-2 text-zinc-300 hover:text-indigo-400 transition-colors"><Phone className="w-4 h-4 text-zinc-500" />{c.phone}</a>}
             {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-zinc-300 hover:text-blue-400 transition-colors"><ExternalLink className="w-4 h-4 text-zinc-500" />LinkedIn</a>}
             <div className="flex items-center gap-2 text-zinc-400"><MapPin className="w-4 h-4 text-zinc-500" />{c.city}, {c.country}</div>
-            <div className="flex items-center gap-2 text-zinc-400"><Clock className="w-4 h-4 text-zinc-500" />Seguimiento: {c.follow_up_frequency === 'weekly' ? 'Semanal' : 'Mensual'}</div>
+            <div className="flex items-center gap-2 text-zinc-400"><Clock className="w-4 h-4 text-zinc-500" />Seguimiento: {frequencyConfig[c.follow_up_frequency as keyof typeof frequencyConfig]?.label ?? c.follow_up_frequency}</div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-zinc-400"><Calendar className="w-4 h-4 text-zinc-500" />Próximo: {c.next_follow_up_date ? new Date(c.next_follow_up_date).toLocaleDateString('es-ES') : 'No definido'}</div>
               {c.next_follow_up_date && <button
@@ -233,6 +239,47 @@ export default function ContactDetailPage() {
               <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 rounded-lg text-xs font-medium transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> LinkedIn
               </a>
+            )}
+          </div>
+
+          {/* Work History */}
+          <div className="mt-5 border-t border-zinc-800/50 pt-4">
+            <button onClick={() => setShowWorkHistory(p => !p)}
+              className="w-full flex items-center justify-between text-xs font-medium text-zinc-400 hover:text-white transition-colors mb-2">
+              <span className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Historial profesional ({workHistory.length})</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showWorkHistory ? 'rotate-180' : ''}`} />
+            </button>
+            {showWorkHistory && (
+              <div className="space-y-2">
+                {workHistory.map(w => (
+                  <div key={w.id} className="flex items-start justify-between gap-2 p-2 bg-zinc-900/40 rounded-lg">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-zinc-200 truncate">{w.job_title || '—'}</p>
+                      <p className="text-xs text-zinc-400 truncate">{w.company}</p>
+                      {(w.start_date || w.end_date) && (
+                        <p className="text-xs text-zinc-600 mt-0.5">
+                          {w.start_date ? new Date(w.start_date).getFullYear() : '?'} →{' '}
+                          {w.is_current ? 'actualidad' : w.end_date ? new Date(w.end_date).getFullYear() : '?'}
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={async () => {
+                      const supabase = createClient()
+                      await supabase.from('work_history').delete().eq('id', w.id)
+                      setWorkHistory(prev => prev.filter(x => x.id !== w.id))
+                    }} className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {workHistory.length === 0 && (
+                  <p className="text-xs text-zinc-600 text-center py-1">Sin historial añadido</p>
+                )}
+                <button onClick={() => setShowAddWork(true)}
+                  className="w-full py-1.5 border border-dashed border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-white rounded-lg text-xs transition-colors">
+                  + Añadir empresa anterior
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -391,6 +438,14 @@ export default function ContactDetailPage() {
               </button>
             </div>
           )}
+
+          {/* AI Tab */}
+          {tab === 'ia' && (
+            <ContactAIChat
+              contactId={c.id}
+              contactName={`${c.first_name} ${c.last_name || ''}`.trim()}
+            />
+          )}
         </div>
       </div>
 
@@ -522,6 +577,73 @@ export default function ContactDetailPage() {
           onClose={() => setShowEditContact(false)}
           onSaved={(updated) => { setContact(updated); setNotes(updated.notes || '') }}
         />
+      )}
+
+      {/* Add Work History Modal */}
+      {showAddWork && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddWork(false)} />
+          <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Añadir empresa anterior</h2>
+              <button onClick={() => setShowAddWork(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Empresa *</label>
+                <input value={newWork.company} onChange={e => setNewWork(p => ({ ...p, company: e.target.value }))}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Nombre de la empresa" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Cargo</label>
+                <input value={newWork.job_title} onChange={e => setNewWork(p => ({ ...p, job_title: e.target.value }))}
+                  className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" placeholder="Ej: Director de Innovación" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Inicio</label>
+                  <input type="date" value={newWork.start_date} onChange={e => setNewWork(p => ({ ...p, start_date: e.target.value }))}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fin</label>
+                  <input type="date" value={newWork.end_date} onChange={e => setNewWork(p => ({ ...p, end_date: e.target.value }))}
+                    disabled={newWork.is_current}
+                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-40" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={newWork.is_current} onChange={e => setNewWork(p => ({ ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date }))}
+                  className="w-4 h-4 rounded border-zinc-700 text-indigo-600 focus:ring-indigo-500" />
+                <span className="text-xs text-zinc-400">Trabajo actual</span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowAddWork(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
+              <button onClick={async () => {
+                if (!newWork.company.trim()) return alert('La empresa es obligatoria')
+                if (!user) return alert('Sesión no encontrada')
+                try {
+                  const supabase = createClient()
+                  const { data, error } = await supabase.from('work_history').insert({
+                    user_id: user.id, contact_id: c.id,
+                    company: newWork.company.trim(),
+                    job_title: newWork.job_title.trim() || null,
+                    start_date: newWork.start_date || null,
+                    end_date: newWork.is_current ? null : (newWork.end_date || null),
+                    is_current: newWork.is_current,
+                  }).select().single()
+                  if (error) throw error
+                  setWorkHistory(prev => [data as WorkHistory, ...prev])
+                  setShowAddWork(false)
+                  setNewWork({ company: '', job_title: '', start_date: '', end_date: '', is_current: false })
+                } catch (e) {
+                  alert('Error al guardar: ' + (e instanceof Error ? e.message : 'Intenta de nuevo'))
+                }
+              }} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Guardar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
