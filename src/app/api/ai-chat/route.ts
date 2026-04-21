@@ -185,6 +185,18 @@ export async function POST(req: NextRequest) {
   if (!geminiRes.ok) {
     const errBody = await geminiRes.text()
     console.error('Gemini API error:', geminiRes.status, errBody)
+    if (geminiRes.status === 429) {
+      return NextResponse.json(
+        { error: 'Sphere AI ha alcanzado el límite de uso. Contacta con el administrador para activar el plan.' },
+        { status: 429 }
+      )
+    }
+    if (geminiRes.status === 401 || geminiRes.status === 403) {
+      return NextResponse.json(
+        { error: 'Sphere AI no está configurado correctamente. Verifica la API key en Vercel.' },
+        { status: 502 }
+      )
+    }
     let detail = ''
     try {
       const parsed = JSON.parse(errBody)
