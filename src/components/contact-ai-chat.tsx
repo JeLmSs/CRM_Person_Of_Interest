@@ -4,35 +4,38 @@ import { createClient } from '@/lib/supabase/client'
 import { AiConversation } from '@/lib/types/database'
 import { Send, Trash2, Sparkles, Loader2 } from 'lucide-react'
 
+// Suggestions when a specific person is loaded as context
 const CONTACT_SUGGESTIONS = [
-  '¿Qué temas son buenos para romper el hielo con este contacto?',
-  '¿Cómo puedo aportar valor a esta persona en la próxima interacción?',
-  'Redáctame un mensaje de seguimiento tras nuestra última reunión',
-  '¿Qué oportunidades de colaboración veo con este contacto?',
-  '¿Cómo está el estado de nuestra relación y qué puedo mejorar?',
-  'Sugiere un email para reconectar con este contacto',
+  '¿Cómo rompo el hielo en la próxima sesión con esta persona?',
+  '¿Qué sectores encajan con su perfil profesional?',
+  'Redacta un mensaje de seguimiento tras nuestra última reunión',
+  '¿Qué recursos o formaciones le recomendaría?',
+  '¿Cómo valoro el estado de su búsqueda de empleo?',
+  'Sugiere preguntas para la próxima entrevista de orientación',
 ]
 
+// Suggestions for general career-advisor mode (no contact selected)
 const GENERAL_SUGGESTIONS = [
-  '¿Cómo me presento en una entrevista para un cargo de dirección?',
-  'Ayúdame a preparar mi elevator pitch profesional',
-  '¿Cómo negocio un aumento de salario?',
-  'Redacta un email para pedir una reunión de networking',
-  '¿Cómo respondo a "¿cuál es tu mayor debilidad?" en una entrevista?',
-  '¿Cómo cambio de sector profesional sin experiencia directa?',
+  '¿Cómo motivo a alguien que lleva meses sin encontrar trabajo?',
+  '¿Qué técnicas de búsqueda de empleo funcionan mejor hoy en día?',
+  'Ayúdame a preparar un taller de LinkedIn para mis candidatos',
+  '¿Cómo detecto si un candidato está saboteando su propia búsqueda?',
+  '¿Cómo preparo a alguien para una entrevista por competencias?',
+  'Dame un guión para una primera sesión de orientación laboral',
 ]
 
 interface Props {
   contactId?: string | null
   contactName?: string | null
+  /** When true: no inner header, integrates flush into parent layout */
+  embedded?: boolean
 }
 
-export default function ContactAIChat({ contactId, contactName }: Props) {
+export default function ContactAIChat({ contactId, contactName, embedded }: Props) {
   const [messages, setMessages] = useState<AiConversation[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -59,11 +62,11 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
     const trimmed = text.trim()
     if (!trimmed || loading) return
     setInput('')
-    setError(null)
     setLoading(true)
 
+    const optimisticId = `temp-${Date.now()}`
     const optimistic: AiConversation = {
-      id: `temp-${Date.now()}`,
+      id: optimisticId,
       user_id: '',
       contact_id: contactId || '',
       role: 'user',
@@ -90,8 +93,20 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
         created_at: new Date().toISOString(),
       } as AiConversation])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al contactar con la IA')
-      setMessages(prev => prev.filter(m => m.id !== optimistic.id))
+      // Show error as an assistant bubble so the chat never collapses back to
+      // the suggestions screen — the user message stays visible
+      const errMsg = e instanceof Error ? e.message : 'Error al contactar con Sphere AI'
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          user_id: '',
+          contact_id: contactId || '',
+          role: 'assistant',
+          content: `⚠️ ${errMsg}`,
+          created_at: new Date().toISOString(),
+        } as AiConversation,
+      ])
     } finally {
       setLoading(false)
       textareaRef.current?.focus()
@@ -117,44 +132,60 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
   }
 
   const headerTitle = isContactMode
-    ? `Preparar interacción con ${contactName}`
-    : 'Asistente de carrera y networking'
+    ? `Contexto: ${contactName}`
+    : 'Sphere AI · Modo general'
 
-  const emptyText = isContactMode
-    ? `Pregúntame cualquier cosa sobre ${contactName} para preparar tu próxima interacción. Tengo acceso a todo su perfil, historial e interacciones.`
-    : 'Estoy aquí para ayudarte a preparar entrevistas, redactar mensajes profesionales, practicar networking y desarrollar tu carrera. ¿Por dónde empezamos?'
+  const emptyHeading = isContactMode
+    ? `¿En qué puedo ayudarte con ${contactName}?`
+    : '¿En qué puedo ayudarte hoy?'
+
+  const emptySubtext = isContactMode
+    ? 'Tengo acceso a su perfil completo, historial de interacciones y notas.'
+    : 'Soy tu asistente de orientación laboral. Selecciona un candidato o hazme una pregunta general.'
+
+  const wrapperCls = embedded
+    ? 'flex flex-col h-full'
+    : 'flex flex-col h-full bg-[#0f0f14] border border-zinc-800/50 rounded-xl overflow-hidden'
 
   return (
-    <div className="flex flex-col h-full bg-[#0f0f14] border border-zinc-800/50 rounded-xl overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-          <span className="text-sm font-semibold text-white truncate">{headerTitle}</span>
+    <div className={wrapperCls}>
+      {/* Inner header — only when not embedded in a parent page */}
+      {!embedded && (
+        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+            <span className="text-sm font-semibold text-white truncate">{headerTitle}</span>
+          </div>
+          {messages.length > 0 && (
+            <button onClick={clearConversation} title="Borrar conversación"
+              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors shrink-0 ml-2">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
-        {messages.length > 0 && (
-          <button onClick={clearConversation} title="Borrar conversación"
-            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors shrink-0 ml-2">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {loadingHistory ? (
-          <div className="flex justify-center pt-8">
+          <div className="flex justify-center pt-12">
             <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="space-y-4 pt-2">
-            <p className="text-sm text-zinc-400 text-center">{emptyText}</p>
+          <div className="flex flex-col items-center justify-center h-full gap-5 px-4 pb-8 text-center">
+            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-600/15 border border-indigo-500/20">
+              <Sparkles className="w-5 h-5 text-indigo-400" />
+            </div>
             <div>
-              <p className="text-xs text-zinc-500 mb-2 font-medium">Preguntas sugeridas:</p>
-              <div className="space-y-2">
+              <p className="text-base font-semibold text-white">{emptyHeading}</p>
+              <p className="text-sm text-zinc-500 mt-1 max-w-sm">{emptySubtext}</p>
+            </div>
+            {/* Horizontal scrollable suggestion chips */}
+            <div className="w-full max-w-2xl overflow-x-auto pb-1">
+              <div className="flex gap-2 w-max mx-auto">
                 {suggestions.map((q, i) => (
                   <button key={i} onClick={() => sendMessage(q)}
-                    className="w-full text-left px-3 py-2 rounded-lg bg-zinc-900/60 hover:bg-indigo-600/10 border border-zinc-800 hover:border-indigo-500/30 text-xs text-zinc-300 hover:text-indigo-300 transition-colors">
+                    className="shrink-0 px-3 py-2 rounded-xl bg-zinc-900/70 hover:bg-indigo-600/10 border border-zinc-800 hover:border-indigo-500/30 text-xs text-zinc-300 hover:text-indigo-300 transition-colors text-left max-w-[200px] whitespace-normal leading-relaxed">
                     {q}
                   </button>
                 ))}
@@ -165,25 +196,36 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
           <>
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-sm'
-                    : 'bg-zinc-800/70 text-zinc-200 rounded-bl-sm border border-zinc-700/50'
-                }`}>
-                  {msg.content}
-                </div>
+                {msg.role === 'assistant' ? (
+                  <div className="flex items-end gap-2 max-w-[85%]">
+                    <div className="w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center shrink-0 mb-0.5">
+                      <Sparkles className="w-3 h-3 text-indigo-400" />
+                    </div>
+                    <div className={`px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                      msg.content.startsWith('⚠️')
+                        ? 'bg-red-500/10 border border-red-500/20 text-red-300'
+                        : 'bg-zinc-800/70 text-zinc-200 border border-zinc-700/50'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed whitespace-pre-wrap">
+                    {msg.content}
+                  </div>
+                )}
               </div>
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-zinc-800/70 border border-zinc-700/50">
-                  <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                <div className="flex items-end gap-2">
+                  <div className="w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                  </div>
+                  <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-zinc-800/70 border border-zinc-700/50">
+                    <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                  </div>
                 </div>
-              </div>
-            )}
-            {error && (
-              <div className="text-xs text-red-400 text-center px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
-                {error}
               </div>
             )}
             <div ref={bottomRef} />
@@ -191,15 +233,17 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
         )}
       </div>
 
-      {/* Quick suggestions when chat has content */}
+      {/* Quick chips when chat has content */}
       {messages.length > 0 && (
-        <div className="px-3 pt-2 flex flex-wrap gap-1.5 shrink-0">
-          {suggestions.slice(0, 3).map((q, i) => (
-            <button key={i} onClick={() => sendMessage(q)}
-              className="text-xs px-2.5 py-1 rounded-full bg-zinc-800/60 hover:bg-indigo-600/15 border border-zinc-700 hover:border-indigo-500/40 text-zinc-400 hover:text-indigo-400 transition-colors">
-              {q.length > 42 ? q.slice(0, 42) + '…' : q}
-            </button>
-          ))}
+        <div className="px-3 pt-2 overflow-x-auto shrink-0">
+          <div className="flex gap-1.5 w-max pb-1">
+            {suggestions.slice(0, 4).map((q, i) => (
+              <button key={i} onClick={() => sendMessage(q)}
+                className="shrink-0 text-xs px-2.5 py-1.5 rounded-full bg-zinc-800/60 hover:bg-indigo-600/15 border border-zinc-700 hover:border-indigo-500/40 text-zinc-400 hover:text-indigo-400 transition-colors whitespace-nowrap max-w-[220px] truncate">
+                {q}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -212,7 +256,7 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter para nueva línea)"
+            placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter nueva línea)"
             className="flex-1 px-3 py-2 bg-zinc-900/60 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
             style={{ minHeight: '40px', maxHeight: '120px' }}
           />
@@ -224,9 +268,15 @@ export default function ContactAIChat({ contactId, contactName }: Props) {
             <Send className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-zinc-600 mt-1.5 text-center">
-          Solo networking profesional y desarrollo de carrera · Historial guardado por sesión
-        </p>
+        <div className="flex justify-between items-center mt-1.5">
+          <p className="text-xs text-zinc-600">Sphere AI · Solo orientación laboral y networking profesional</p>
+          {embedded && messages.length > 0 && (
+            <button onClick={clearConversation} className="text-xs text-zinc-600 hover:text-red-400 transition-colors flex items-center gap-1">
+              <Trash2 className="w-3 h-3" />
+              Borrar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
