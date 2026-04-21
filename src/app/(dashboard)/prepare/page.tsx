@@ -46,7 +46,7 @@ export default function PreparePage() {
   )
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh">
       {/* Thin top bar */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/60 shrink-0">
         <div className="flex items-center gap-2">

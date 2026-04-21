@@ -183,8 +183,17 @@ export async function POST(req: NextRequest) {
   })
 
   if (!geminiRes.ok) {
-    console.error('Gemini API error:', await geminiRes.text())
-    return NextResponse.json({ error: 'Error al contactar con el asistente IA' }, { status: 502 })
+    const errBody = await geminiRes.text()
+    console.error('Gemini API error:', geminiRes.status, errBody)
+    let detail = ''
+    try {
+      const parsed = JSON.parse(errBody)
+      detail = parsed?.error?.message || parsed?.error?.status || ''
+    } catch { detail = errBody.slice(0, 120) }
+    return NextResponse.json(
+      { error: `Error Sphere AI (${geminiRes.status})${detail ? ': ' + detail : ''}` },
+      { status: 502 }
+    )
   }
 
   const geminiData = await geminiRes.json()
