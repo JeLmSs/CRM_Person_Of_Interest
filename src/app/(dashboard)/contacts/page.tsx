@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Contact, ContactTier, ContactStatus } from '@/lib/types/database'
 import { tierConfig, getRelationshipColor, getDaysUntilFollowUp, getFollowUpUrgency, getInitials, formatRelativeDate } from '@/lib/utils'
-import { Plus, Search, LayoutGrid, List, X, Users, Phone, Mail, ExternalLink, ChevronDown, ArrowUpDown } from 'lucide-react'
+import { Plus, Search, LayoutGrid, List, X, Users, Phone, Mail, ExternalLink, ChevronDown, ArrowUpDown, BookUser } from 'lucide-react'
 import Link from 'next/link'
 import { loadContacts } from '@/lib/supabase/data-loaders'
 
@@ -25,6 +25,7 @@ const tierOrder: ContactTier[] = ['S', 'A', 'B', 'C', 'D']
 const frequencyOptions = [
   { value: 'daily', label: 'Diario' }, { value: 'weekly', label: 'Semanal' }, { value: 'biweekly', label: 'Quincenal' },
   { value: 'monthly', label: 'Mensual' }, { value: 'quarterly', label: 'Trimestral' },
+  { value: 'annually', label: 'Anual (ej. felicitar Navidad)' },
 ]
 
 export default function ContactsPage() {
@@ -78,6 +79,29 @@ export default function ContactsPage() {
     })
     return result
   }, [contacts, search, tierFilter, statusFilter, sortBy])
+
+  const handleImportFromContacts = async () => {
+    const nav = navigator as Navigator & { contacts?: { select: (props: string[], opts?: { multiple?: boolean }) => Promise<Array<{ name?: string[]; email?: string[]; tel?: string[] }>> } }
+    if (!nav.contacts) return
+    try {
+      const results = await nav.contacts.select(['name', 'email', 'tel'], { multiple: false })
+      if (!results || results.length === 0) return
+      const c = results[0]
+      const fullName = c.name?.[0] ?? ''
+      const parts = fullName.trim().split(/\s+/)
+      const first = parts[0] ?? ''
+      const last = parts.slice(1).join(' ')
+      setFormData(p => ({
+        ...p,
+        first_name: first || p.first_name,
+        last_name: last || p.last_name,
+        email: c.email?.[0] ?? p.email,
+        phone: c.tel?.[0] ?? p.phone,
+      }))
+    } catch {
+      // user cancelled or permission denied
+    }
+  }
 
   const handleSaveContact = async () => {
     setSaving(true)
@@ -268,10 +292,19 @@ export default function ContactsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="relative bg-[#0f0f14] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 md:p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-white">Nuevo contacto</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
             </div>
+            {'contacts' in navigator && (
+              <button
+                onClick={handleImportFromContacts}
+                className="w-full flex items-center justify-center gap-2 mb-4 py-2.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500/40 text-indigo-400 hover:text-indigo-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                <BookUser className="w-4 h-4" />
+                Importar desde agenda del móvil
+              </button>
+            )}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
