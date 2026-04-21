@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/supabase/hooks'
@@ -24,6 +25,7 @@ const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', badge: '3' },
   { label: 'Contactos', icon: Users, href: '/contacts' },
   { label: 'Calendario', icon: Calendar, href: '/calendar' },
+  { label: 'Preparar', icon: Sparkles, href: '/prepare' },
   { label: 'LinkedIn', icon: LinkIcon, href: '/linkedin' },
   { label: 'Configuracion', icon: Settings, href: '/settings' },
 ]
