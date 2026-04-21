@@ -47,10 +47,12 @@ export default function PreparePage() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh">
-      {/* Thin top bar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/60 shrink-0">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-indigo-400" />
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 h-12 border-b border-zinc-800/50 shrink-0 bg-[#09090b]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          </div>
           <span className="text-sm font-semibold text-white">Sphere AI</span>
         </div>
 
@@ -78,7 +80,7 @@ export default function PreparePage() {
         <div className="relative">
           <button
             onClick={() => setShowSelector(p => !p)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 rounded-lg text-xs transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-700/60 hover:border-zinc-600 rounded-xl text-xs transition-colors shadow-sm"
           >
             {selectedContact ? (
               <>
