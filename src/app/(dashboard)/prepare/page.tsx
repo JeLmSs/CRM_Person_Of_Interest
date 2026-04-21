@@ -46,14 +46,14 @@ export default function PreparePage() {
   )
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh">
+    <div className="flex flex-col h-[calc(100svh-3.5rem)] lg:h-svh overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 h-12 border-b border-zinc-800/50 shrink-0 bg-[#09090b]">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 px-3 h-11 border-b border-zinc-800/50 shrink-0 bg-[#09090b]">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="w-7 h-7 rounded-lg bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
           </div>
-          <span className="text-sm font-semibold text-white">Sphere AI</span>
+          <span className="text-sm font-semibold text-white whitespace-nowrap">Sphere AI</span>
         </div>
 
         <div className="flex-1" />
@@ -77,28 +77,28 @@ export default function PreparePage() {
         </div>
 
         {/* Contact selector */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setShowSelector(p => !p)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-700/60 hover:border-zinc-600 rounded-xl text-xs transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-700/60 hover:border-zinc-600 rounded-xl text-xs transition-colors max-w-[180px] sm:max-w-[220px]"
           >
             {selectedContact ? (
               <>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${tierConfig[selectedContact.tier].bgColor} ${tierConfig[selectedContact.tier].color} border`}>
                   {getInitials(selectedContact.first_name, selectedContact.last_name)}
                 </div>
-                <span className="text-white max-w-[120px] truncate">{selectedContact.first_name} {selectedContact.last_name}</span>
+                <span className="text-white truncate">{selectedContact.first_name} {selectedContact.last_name}</span>
                 <button
                   onClick={e => { e.stopPropagation(); setSelectedContact(null) }}
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors ml-0.5"
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
                 >
                   <X className="w-3 h-3" />
                 </button>
               </>
             ) : (
               <>
-                <span className="text-zinc-400">Modo general</span>
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="text-zinc-400 whitespace-nowrap">Modo general</span>
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               </>
             )}
           </button>
@@ -161,7 +161,7 @@ export default function PreparePage() {
       </div>
 
       {/* Chat — fills all remaining height */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ContactAIChat
           key={selectedContact?.id ?? 'general'}
           contactId={selectedContact?.id ?? null}
