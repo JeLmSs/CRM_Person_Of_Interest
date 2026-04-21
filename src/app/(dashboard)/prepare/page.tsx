@@ -46,7 +46,7 @@ export default function PreparePage() {
   )
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 h-12 border-b border-zinc-800/50 shrink-0 bg-[#09090b]">
         <div className="flex items-center gap-2.5">
@@ -161,7 +161,7 @@ export default function PreparePage() {
       </div>
 
       {/* Chat — fills all remaining height */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ContactAIChat
           key={selectedContact?.id ?? 'general'}
           contactId={selectedContact?.id ?? null}

@@ -330,8 +330,8 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
       <div className="shrink-0 border-t border-zinc-800/40">
         {/* Quick suggestion pills — shown when chat has messages */}
         {messages.length > 0 && (
-          <div className="px-4 pt-3 overflow-x-auto">
-            <div className="flex gap-2 w-max max-w-full pb-0.5">
+          <div className="px-4 pt-3 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex gap-2 pb-0.5" style={{ width: 'max-content' }}>
               {suggestions.slice(0, 4).map((q, i) => (
                 <button key={i} onClick={() => sendMessage(q)}
                   className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-zinc-800/60 hover:bg-indigo-600/10 border border-zinc-700/60 hover:border-indigo-500/30 text-zinc-500 hover:text-indigo-300 transition-all whitespace-nowrap max-w-[200px] truncate">
@@ -352,7 +352,7 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
                 onChange={e => { setInput(e.target.value); resizeTextarea() }}
                 onKeyDown={handleKeyDown}
                 rows={1}
-                placeholder="Escribe tu pregunta… (Enter para enviar)"
+                placeholder="Escribe tu pregunta…"
                 className="flex-1 px-4 py-3.5 bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none resize-none leading-relaxed"
                 style={{ minHeight: '52px', maxHeight: '160px' }}
               />
