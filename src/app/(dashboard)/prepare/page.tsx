@@ -1,9 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Contact } from '@/lib/types/database'
 import { tierConfig, getInitials } from '@/lib/utils'
-import { Sparkles, ChevronDown, X } from 'lucide-react'
+import { Sparkles, ChevronDown, Info, X } from 'lucide-react'
 import ContactAIChat from '@/components/contact-ai-chat'
 import { loadContacts } from '@/lib/supabase/data-loaders'
 
@@ -11,8 +11,10 @@ export default function PreparePage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [showSelector, setShowSelector] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const infoRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -28,46 +30,79 @@ export default function PreparePage() {
     })
   }, [])
 
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (infoRef.current && !infoRef.current.contains(e.target as Node)) {
+        setShowInfo(false)
+      }
+    }
+    if (showInfo) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showInfo])
+
   const filtered = contacts.filter(c =>
     search === '' ||
     `${c.first_name} ${c.last_name} ${c.company}`.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 gap-4 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-indigo-400" />
-            Preparar
-          </h1>
-          <p className="text-zinc-400 text-sm mt-0.5">
-            Prepara entrevistas, reuniones y conversaciones con ayuda de IA
-          </p>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Thin top bar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/60 shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-indigo-400" />
+          <span className="text-sm font-semibold text-white">Sphere AI</span>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Info button */}
+        <div ref={infoRef} className="relative">
+          <button
+            onClick={() => setShowInfo(p => !p)}
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+            aria-label="Información"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          {showInfo && (
+            <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-[#0f0f14] border border-zinc-800 rounded-xl shadow-xl p-3 text-xs text-zinc-400 space-y-1.5">
+              <p className="text-zinc-200 font-medium text-sm">Tu asistente de orientación laboral</p>
+              <p>Sphere AI te ayuda a preparar cada sesión con tus candidatos: redacta mensajes de seguimiento, sugiere recursos formativos, detecta patrones de búsqueda y te da argumentos para motivarlos. Selecciona un candidato para cargar su contexto completo, o úsalo en modo general para técnicas de orientación, talleres y entrevistas.</p>
+              <p className="text-zinc-500 border-t border-zinc-800 pt-1.5 mt-1.5">Diseñado exclusivamente para orientación laboral y networking profesional.</p>
+            </div>
+          )}
         </div>
 
         {/* Contact selector */}
         <div className="relative">
           <button
             onClick={() => setShowSelector(p => !p)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#0f0f14] border border-zinc-800 hover:border-zinc-700 rounded-xl text-sm transition-colors min-w-[220px] justify-between"
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 rounded-lg text-xs transition-colors"
           >
             {selectedContact ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${tierConfig[selectedContact.tier].bgColor} ${tierConfig[selectedContact.tier].color} border`}>
+              <>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${tierConfig[selectedContact.tier].bgColor} ${tierConfig[selectedContact.tier].color} border`}>
                   {getInitials(selectedContact.first_name, selectedContact.last_name)}
                 </div>
-                <span className="text-white truncate">{selectedContact.first_name} {selectedContact.last_name}</span>
-              </div>
+                <span className="text-white max-w-[120px] truncate">{selectedContact.first_name} {selectedContact.last_name}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); setSelectedContact(null) }}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </>
             ) : (
-              <span className="text-zinc-400">Modo general (sin contacto)</span>
+              <>
+                <span className="text-zinc-400">Modo general</span>
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+              </>
             )}
-            <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
           </button>
 
           {showSelector && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-80 bg-[#0f0f14] border border-zinc-800 rounded-xl shadow-xl overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-[#0f0f14] border border-zinc-800 rounded-xl shadow-xl overflow-hidden">
               <div className="p-2 border-b border-zinc-800">
                 <input
                   autoFocus
@@ -75,26 +110,25 @@ export default function PreparePage() {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Buscar contacto..."
-                  className="w-full px-3 py-1.5 bg-zinc-900/60 border border-zinc-800 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  className="w-full px-3 py-1.5 bg-zinc-900/60 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
-              <div className="max-h-64 overflow-y-auto">
-                {/* General mode option */}
+              <div className="max-h-60 overflow-y-auto">
                 <button
                   onClick={() => { setSelectedContact(null); setShowSelector(false); setSearch('') }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/50 transition-colors text-left ${!selectedContact ? 'bg-indigo-600/10' : ''}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800/50 transition-colors text-left ${!selectedContact ? 'bg-indigo-600/10' : ''}`}
                 >
-                  <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-3 h-3 text-indigo-400" />
                   </div>
                   <div>
-                    <p className="text-sm text-white">Modo general</p>
-                    <p className="text-xs text-zinc-500">Sin contacto — entrevistas, networking libre</p>
+                    <p className="text-xs text-white">Modo general</p>
+                    <p className="text-[11px] text-zinc-500">Sin contacto — entrevistas, networking</p>
                   </div>
                 </button>
 
                 {loading ? (
-                  <div className="px-4 py-3 text-xs text-zinc-500">Cargando contactos...</div>
+                  <div className="px-4 py-3 text-xs text-zinc-500">Cargando...</div>
                 ) : filtered.length === 0 ? (
                   <div className="px-4 py-3 text-xs text-zinc-500">Sin resultados</div>
                 ) : (
@@ -102,14 +136,14 @@ export default function PreparePage() {
                     <button
                       key={c.id}
                       onClick={() => { setSelectedContact(c); setShowSelector(false); setSearch('') }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/50 transition-colors text-left ${selectedContact?.id === c.id ? 'bg-indigo-600/10' : ''}`}
+                      className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800/50 transition-colors text-left ${selectedContact?.id === c.id ? 'bg-indigo-600/10' : ''}`}
                     >
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${tierConfig[c.tier].bgColor} ${tierConfig[c.tier].color} border`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${tierConfig[c.tier].bgColor} ${tierConfig[c.tier].color} border`}>
                         {getInitials(c.first_name, c.last_name)}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm text-white truncate">{c.first_name} {c.last_name}</p>
-                        <p className="text-xs text-zinc-500 truncate">{c.job_title} · {c.company}</p>
+                        <p className="text-xs text-white truncate">{c.first_name} {c.last_name}</p>
+                        <p className="text-[11px] text-zinc-500 truncate">{c.job_title}{c.job_title && c.company ? ' · ' : ''}{c.company}</p>
                       </div>
                     </button>
                   ))
@@ -118,34 +152,19 @@ export default function PreparePage() {
             </div>
           )}
 
-          {/* Backdrop to close selector */}
           {showSelector && (
             <div className="fixed inset-0 z-40" onClick={() => { setShowSelector(false); setSearch('') }} />
           )}
         </div>
       </div>
 
-      {/* Context pill when contact is selected */}
-      {selectedContact && (
-        <div className="flex items-center gap-2 shrink-0">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${tierConfig[selectedContact.tier].bgColor} ${tierConfig[selectedContact.tier].color}`}>
-            <span>Contexto cargado:</span>
-            <span className="font-bold">{selectedContact.first_name} {selectedContact.last_name}</span>
-            {selectedContact.company && <span className="opacity-70">· {selectedContact.company}</span>}
-            <button onClick={() => setSelectedContact(null)} className="ml-1 hover:opacity-70 transition-opacity">
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-          <span className="text-xs text-zinc-500">Perfil, interacciones y notas incluidos en el contexto</span>
-        </div>
-      )}
-
-      {/* Chat — takes remaining height */}
+      {/* Chat — fills all remaining height */}
       <div className="flex-1 min-h-0">
         <ContactAIChat
           key={selectedContact?.id ?? 'general'}
           contactId={selectedContact?.id ?? null}
           contactName={selectedContact ? `${selectedContact.first_name} ${selectedContact.last_name || ''}`.trim() : null}
+          embedded
         />
       </div>
     </div>

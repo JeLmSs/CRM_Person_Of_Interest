@@ -25,7 +25,7 @@ const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', badge: '3' },
   { label: 'Contactos', icon: Users, href: '/contacts' },
   { label: 'Calendario', icon: Calendar, href: '/calendar' },
-  { label: 'Preparar', icon: Sparkles, href: '/prepare' },
+  { label: 'Sphere AI', icon: Sparkles, href: '/prepare' },
   { label: 'LinkedIn', icon: LinkIcon, href: '/linkedin' },
   { label: 'Configuracion', icon: Settings, href: '/settings' },
 ]
