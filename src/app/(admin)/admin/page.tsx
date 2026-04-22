@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell
@@ -100,11 +101,14 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function AdminPage() {
+function AdminPageContent() {
+  const searchParams = useSearchParams()
   const [stats, setStats] = useState<StatsData | null>(null)
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'users'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'users'>(
+    searchParams.get('tab') === 'users' ? 'users' : 'overview'
+  )
   const [refreshing, setRefreshing] = useState(false)
 
   async function fetchData() {
@@ -515,5 +519,20 @@ export default function AdminPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 space-y-6">
+        <div className="h-8 w-56 bg-zinc-800 rounded-lg animate-pulse" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-zinc-800/50 rounded-xl animate-pulse" />)}
+        </div>
+      </div>
+    }>
+      <AdminPageContent />
+    </Suspense>
   )
 }
