@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     ])
 
     if (!contactRes.data) return NextResponse.json({ suggestions: [] })
-    const tags = (tagsRes.data || []) as { is_positive: boolean; tags: { name: string } | null }[]
+    const tags = (tagsRes.data || []) as unknown as Parameters<typeof buildContactSuggestions>[2]
     const suggestions = buildContactSuggestions(contactRes.data, interactionsRes.data || [], tags)
     return NextResponse.json({ suggestions })
   }
