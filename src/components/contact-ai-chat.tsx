@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { AiConversation } from '@/lib/types/database'
-import { Send, Trash2, Sparkles, Loader2 } from 'lucide-react'
+import { Send, Trash2, Sparkles, Loader2, SquarePen } from 'lucide-react'
 
 const CONTACT_SUGGESTIONS = [
   '¿Cómo rompo el hielo en la próxima sesión?',
@@ -45,6 +45,9 @@ function AIContent({ text }: { text: string }) {
     <div className="space-y-2.5 text-sm leading-[1.7] text-zinc-200">
       {blocks.map((block, bi) => {
         const lines = block.split('\n').filter(Boolean)
+        // Horizontal rule
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(block.trim()))
+          return <hr key={bi} className="border-zinc-700/50 my-1" />
         if (lines.some(l => /^\d+\.\s/.test(l))) {
           return (
             <ol key={bi} className="space-y-1.5">
@@ -110,7 +113,7 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const isContactMode = !!contactId
@@ -128,7 +131,10 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
   }, [contactId])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = messagesRef.current
+    if (!el) return
+    // rAF ensures DOM has fully painted before measuring scrollHeight
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
   }, [messages, loading])
 
   function resizeTextarea() {
@@ -176,7 +182,7 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
   }
 
   async function clearConversation() {
-    if (!confirm('¿Borrar toda la conversación?')) return
+    if (!confirm('¿Empezar nueva conversación? Se borrará el historial.')) return
     const supabase = createClient()
     if (contactId) await supabase.from('ai_conversations').delete().eq('contact_id', contactId)
     else await supabase.from('ai_conversations').delete().is('contact_id', null)
@@ -209,15 +215,15 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
             </span>
           </div>
           {messages.length > 0 && (
-            <button onClick={clearConversation} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-colors shrink-0 ml-2">
-              <Trash2 className="w-4 h-4" />
+            <button onClick={clearConversation} title="Nuevo chat" className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors shrink-0 ml-2">
+              <SquarePen className="w-4 h-4" />
             </button>
           )}
         </div>
       )}
 
       {/* ── Messages ─────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0">
         {loadingHistory ? (
           <div className="flex justify-center pt-16">
             <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
@@ -281,27 +287,12 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
                 </div>
               </div>
             )}
-            <div ref={bottomRef} />
           </div>
         )}
       </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────────── */}
       <div className="shrink-0 border-t border-zinc-800/40" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {/* Quick chips — shown when chat has messages */}
-        {messages.length > 0 && (
-          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="flex gap-1.5 px-3 pt-2.5 pb-0.5" style={{ width: 'max-content' }}>
-              {suggestions.slice(0, 4).map((q, i) => (
-                <button key={i} onClick={() => sendMessage(q)}
-                  className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-zinc-800/60 hover:bg-indigo-600/10 border border-zinc-700/50 hover:border-indigo-500/30 text-zinc-500 hover:text-indigo-300 transition-all whitespace-nowrap max-w-[180px] truncate">
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Input */}
         <div className="px-3 pt-2 pb-3">
           <div className="max-w-2xl mx-auto">
@@ -328,9 +319,9 @@ export default function ContactAIChat({ contactId, contactName, embedded }: Prop
               <p className="text-[10px] text-zinc-600">Sphere AI · Solo orientación laboral</p>
               {messages.length > 0 && (
                 <button onClick={clearConversation}
-                  className="text-[10px] text-zinc-600 hover:text-red-400 transition-colors flex items-center gap-1">
-                  <Trash2 className="w-2.5 h-2.5" />
-                  Borrar
+                  className="text-[10px] text-zinc-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
+                  <SquarePen className="w-2.5 h-2.5" />
+                  Nuevo chat
                 </button>
               )}
             </div>
