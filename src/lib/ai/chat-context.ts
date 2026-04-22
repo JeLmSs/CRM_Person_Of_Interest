@@ -17,6 +17,117 @@ export const SAFETY_SETTINGS = [
   { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
 ]
 
+export type Source = { uri: string; title: string }
+
+type GeminiPart = { text?: string }
+type GeminiCandidate = {
+  content?: { parts?: GeminiPart[] }
+  finishReason?: string
+  groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] }
+}
+
+type GenOpts = {
+  apiKey: string
+  model?: string
+  systemPrompt: string
+  contents: { role: string; parts: { text: string }[] }[]
+  tools?: Record<string, unknown>[]
+  temperature?: number
+  maxOutputTokens?: number
+  maxContinuations?: number
+}
+
+export type GenResult =
+  | { ok: true; text: string; sources: Source[]; continued: number }
+  | { ok: false; status: number; error: string; safety?: boolean }
+
+const CONTINUE_PROMPT = 'Continúa exactamente desde donde lo dejaste. No repitas nada de lo ya escrito, conecta con la última frase y mantén el mismo formato.'
+
+export async function generateWithContinuation(opts: GenOpts): Promise<GenResult> {
+  const model = opts.model ?? GEMINI_FLASH
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${opts.apiKey}`
+  const maxRounds = 1 + (opts.maxContinuations ?? 2)
+  let contents = opts.contents
+  let fullText = ''
+  const sourcesMap = new Map<string, Source>()
+  let continued = 0
+  let lastStatus = 0
+
+  for (let round = 0; round < maxRounds; round++) {
+    const body: Record<string, unknown> = {
+      system_instruction: { parts: [{ text: opts.systemPrompt }] },
+      contents,
+      generationConfig: {
+        temperature: opts.temperature ?? 0.7,
+        maxOutputTokens: opts.maxOutputTokens ?? 4096,
+      },
+      safetySettings: SAFETY_SETTINGS,
+    }
+    if (opts.tools) body.tools = opts.tools
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    lastStatus = res.status
+
+    if (!res.ok) {
+      const errBody = await res.text()
+      console.error('Gemini error:', res.status, errBody)
+      let detail = ''
+      try { detail = JSON.parse(errBody)?.error?.message || '' } catch { detail = errBody.slice(0, 120) }
+      return { ok: false, status: res.status, error: detail || `HTTP ${res.status}` }
+    }
+
+    const data = await res.json()
+    const candidate = data.candidates?.[0] as GeminiCandidate | undefined
+
+    if (candidate?.finishReason === 'SAFETY') {
+      return { ok: false, status: 422, error: 'Contenido bloqueado por seguridad', safety: true }
+    }
+
+    const parts = candidate?.content?.parts || []
+    const chunk = parts.map(p => p.text).filter(Boolean).join('')
+
+    const gChunks = candidate?.groundingMetadata?.groundingChunks || []
+    for (const gc of gChunks) {
+      const web = gc.web
+      if (web?.uri && !sourcesMap.has(web.uri)) {
+        sourcesMap.set(web.uri, { uri: web.uri, title: web.title || web.uri })
+      }
+    }
+
+    // Join with a space if previous chunk ended mid-sentence without whitespace
+    if (fullText && chunk && !/\s$/.test(fullText) && !/^\s/.test(chunk)) {
+      fullText += ' ' + chunk
+    } else {
+      fullText += chunk
+    }
+
+    if (candidate?.finishReason !== 'MAX_TOKENS') break
+    if (round === maxRounds - 1) break
+
+    continued += 1
+    contents = [
+      ...contents,
+      { role: 'model', parts: [{ text: chunk }] },
+      { role: 'user', parts: [{ text: CONTINUE_PROMPT }] },
+    ]
+  }
+
+  if (!fullText.trim()) {
+    return { ok: false, status: lastStatus || 502, error: 'Respuesta vacía del asistente' }
+  }
+
+  return {
+    ok: true,
+    text: fullText.trim(),
+    sources: Array.from(sourcesMap.values()).slice(0, 8),
+    continued,
+  }
+}
+
 export const STYLE_GUIDE = `
 ESTILO DE RESPUESTA:
 - Responde en español, salvo que el usuario escriba en otro idioma.

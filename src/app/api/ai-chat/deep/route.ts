@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
-  GEMINI_BASE,
-  GEMINI_FLASH,
-  SAFETY_SETTINGS,
   STYLE_GUIDE,
   buildContactSystemPrompt,
   buildGeneralSystemPrompt,
   loadGeneralCtx,
+  generateWithContinuation,
 } from '@/lib/ai/chat-context'
 
 export const maxDuration = 60
@@ -86,58 +84,34 @@ export async function POST(req: NextRequest) {
     { role: 'user', parts: [{ text: message.trim() }] },
   ]
 
-  const geminiRes = await fetch(`${GEMINI_BASE}/${GEMINI_FLASH}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: geminiContents,
-      tools: [{ googleSearch: {} }],
-      generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
-      safetySettings: SAFETY_SETTINGS,
-    }),
+  const result = await generateWithContinuation({
+    apiKey,
+    systemPrompt,
+    contents: geminiContents,
+    tools: [{ googleSearch: {} }],
+    temperature: 0.6,
+    maxOutputTokens: 4096,
+    maxContinuations: 2,
   })
 
-  if (!geminiRes.ok) {
-    const errBody = await geminiRes.text()
-    console.error('Gemini deep API error:', geminiRes.status, errBody)
-    if (geminiRes.status === 429) {
+  if (!result.ok) {
+    if (result.safety) {
+      return NextResponse.json({ error: 'La respuesta fue bloqueada por seguridad. Reformula la petición.' }, { status: 422 })
+    }
+    if (result.status === 429) {
       return NextResponse.json({ error: 'Límite de análisis avanzado alcanzado. Inténtalo más tarde.' }, { status: 429 })
     }
-    let detail = ''
-    try { detail = JSON.parse(errBody)?.error?.message || '' } catch { detail = errBody.slice(0, 120) }
-    return NextResponse.json({ error: `Error análisis avanzado (${geminiRes.status})${detail ? ': ' + detail : ''}` }, { status: 502 })
+    return NextResponse.json({ error: `Error análisis avanzado (${result.status})${result.error ? ': ' + result.error : ''}` }, { status: 502 })
   }
 
-  const geminiData = await geminiRes.json()
-  const candidate = geminiData.candidates?.[0]
-
-  if (candidate?.finishReason === 'SAFETY') {
-    return NextResponse.json({ error: 'La respuesta fue bloqueada por seguridad. Reformula la petición.' }, { status: 422 })
-  }
-
-  const parts = candidate?.content?.parts || []
-  const assistantText = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n').trim()
-  if (!assistantText) {
-    return NextResponse.json({ error: 'Respuesta vacía del asistente' }, { status: 502 })
-  }
-
-  type GroundingChunk = { web?: { uri?: string; title?: string } }
-  const chunks: GroundingChunk[] = candidate?.groundingMetadata?.groundingChunks || []
-  const sources = chunks
-    .map(c => c.web)
-    .filter((w): w is { uri: string; title?: string } => !!w?.uri)
-    .map(w => ({ uri: w.uri, title: w.title || w.uri }))
-    .slice(0, 8)
-
-  const finalContent = sources.length
-    ? assistantText + '\n\n__SOURCES__' + JSON.stringify(sources)
-    : assistantText
+  const finalContent = result.sources.length
+    ? result.text + '\n\n__SOURCES__' + JSON.stringify(result.sources)
+    : result.text
 
   await supabase.from('ai_conversations').insert([
     { user_id: user.id, contact_id: contact_id || null, role: 'user', content: '🔎 ' + message.trim() },
     { user_id: user.id, contact_id: contact_id || null, role: 'assistant', content: finalContent },
   ])
 
-  return NextResponse.json({ reply: assistantText, sources })
+  return NextResponse.json({ reply: result.text, sources: result.sources })
 }
