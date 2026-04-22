@@ -69,9 +69,9 @@ export default function PreparePage() {
           </button>
           {showInfo && (
             <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-[#0f0f14] border border-zinc-800 rounded-xl shadow-xl p-3 text-xs text-zinc-400 space-y-1.5">
-              <p className="text-zinc-200 font-medium text-sm">Tu asistente de orientación laboral</p>
-              <p>Sphere AI te ayuda a preparar cada sesión con tus candidatos: redacta mensajes de seguimiento, sugiere recursos formativos, detecta patrones de búsqueda y te da argumentos para motivarlos. Selecciona un candidato para cargar su contexto completo, o úsalo en modo general para técnicas de orientación, talleres y entrevistas.</p>
-              <p className="text-zinc-500 border-t border-zinc-800 pt-1.5 mt-1.5">Diseñado exclusivamente para orientación laboral y networking profesional.</p>
+              <p className="text-zinc-200 font-medium text-sm">Tu copiloto de relaciones</p>
+              <p>Sphere AI te ayuda a ti: prepara tus encuentros, sugiere icebreakers basados en intereses, te dice cuál es el mejor momento del día para escribir y redacta mensajes listos para copiar. Selecciona un contacto para personalizar el contexto, o úsalo en modo general (con resumen de toda tu red).</p>
+              <p className="text-zinc-500 border-t border-zinc-800 pt-1.5 mt-1.5">Activa el botón <span className="text-indigo-300">globo</span> en el chat para que busque información pública sobre la empresa o sector de la persona.</p>
             </div>
           )}
         </div>
@@ -125,7 +125,7 @@ export default function PreparePage() {
                   </div>
                   <div>
                     <p className="text-xs text-white">Modo general</p>
-                    <p className="text-[11px] text-zinc-500">Sin contacto — entrevistas, networking</p>
+                    <p className="text-[11px] text-zinc-500">Resumen de toda tu red</p>
                   </div>
                 </button>
 
