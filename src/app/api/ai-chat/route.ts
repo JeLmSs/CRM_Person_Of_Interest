@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
-  GEMINI_BASE,
-  GEMINI_FLASH,
-  SAFETY_SETTINGS,
   buildContactSystemPrompt,
   buildGeneralSystemPrompt,
   loadGeneralCtx,
+  generateWithContinuation,
 } from '@/lib/ai/chat-context'
+
+export const maxDuration = 45
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY
@@ -73,59 +73,31 @@ export async function POST(req: NextRequest) {
     { role: 'user', parts: [{ text: message.trim() }] },
   ]
 
-  const geminiRes = await fetch(`${GEMINI_BASE}/${GEMINI_FLASH}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: geminiContents,
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
-      safetySettings: SAFETY_SETTINGS,
-    }),
+  const result = await generateWithContinuation({
+    apiKey,
+    systemPrompt,
+    contents: geminiContents,
+    temperature: 0.7,
+    maxOutputTokens: 4096,
   })
 
-  if (!geminiRes.ok) {
-    const errBody = await geminiRes.text()
-    console.error('Gemini API error:', geminiRes.status, errBody)
-    if (geminiRes.status === 429) {
-      return NextResponse.json(
-        { error: 'Sphere AI ha alcanzado el límite de uso. Contacta con el administrador para activar el plan.' },
-        { status: 429 }
-      )
+  if (!result.ok) {
+    if (result.safety) {
+      return NextResponse.json({ error: 'Tu petición fue bloqueada por las políticas de seguridad. Reformúlala con otro enfoque.' }, { status: 422 })
     }
-    if (geminiRes.status === 401 || geminiRes.status === 403) {
-      return NextResponse.json(
-        { error: 'Sphere AI no está configurado correctamente. Verifica la API key en Vercel.' },
-        { status: 502 }
-      )
+    if (result.status === 429) {
+      return NextResponse.json({ error: 'Sphere AI ha alcanzado el límite de uso. Contacta con el administrador para activar el plan.' }, { status: 429 })
     }
-    let detail = ''
-    try {
-      const parsed = JSON.parse(errBody)
-      detail = parsed?.error?.message || parsed?.error?.status || ''
-    } catch { detail = errBody.slice(0, 120) }
-    return NextResponse.json(
-      { error: `Error Sphere AI (${geminiRes.status})${detail ? ': ' + detail : ''}` },
-      { status: 502 }
-    )
-  }
-
-  const geminiData = await geminiRes.json()
-
-  const candidate = geminiData.candidates?.[0]
-  if (candidate?.finishReason === 'SAFETY') {
-    return NextResponse.json({ error: 'Tu petición fue bloqueada por las políticas de seguridad. Reformúlala con otro enfoque.' }, { status: 422 })
-  }
-
-  const assistantText = candidate?.content?.parts?.[0]?.text
-  if (!assistantText) {
-    return NextResponse.json({ error: 'Respuesta vacía del asistente' }, { status: 502 })
+    if (result.status === 401 || result.status === 403) {
+      return NextResponse.json({ error: 'Sphere AI no está configurado correctamente. Verifica la API key en Vercel.' }, { status: 502 })
+    }
+    return NextResponse.json({ error: `Error Sphere AI (${result.status})${result.error ? ': ' + result.error : ''}` }, { status: 502 })
   }
 
   await supabase.from('ai_conversations').insert([
     { user_id: user.id, contact_id: contact_id || null, role: 'user', content: message.trim() },
-    { user_id: user.id, contact_id: contact_id || null, role: 'assistant', content: assistantText },
+    { user_id: user.id, contact_id: contact_id || null, role: 'assistant', content: result.text },
   ])
 
-  return NextResponse.json({ reply: assistantText })
+  return NextResponse.json({ reply: result.text })
 }
