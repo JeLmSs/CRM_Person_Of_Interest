@@ -14,9 +14,17 @@ type InteractionRow = {
   sentiment: string | null
 }
 
+type EmbeddedTag = { name: string } | { name: string }[] | null
+
 type ContactTagRow = {
   is_positive: boolean
-  tags: { name: string } | null
+  tags: EmbeddedTag
+}
+
+function tagName(t: EmbeddedTag): string | null {
+  if (!t) return null
+  if (Array.isArray(t)) return t[0]?.name ?? null
+  return t.name ?? null
 }
 
 const DAY = 86_400_000
@@ -43,7 +51,7 @@ export function buildContactSuggestions(
   const last = interactions[0]
   const since = daysSince(last?.date ?? contact.last_contact_date)
   const until = daysUntil(contact.next_follow_up_date)
-  const positive = tags.filter(t => t.is_positive).map(t => t.tags?.name).filter(Boolean)
+  const positive = tags.filter(t => t.is_positive).map(t => tagName(t.tags)).filter((x): x is string => !!x)
   const negSentiment = last?.sentiment === 'negative' || last?.sentiment === 'very_negative'
 
   if (until !== null && until >= 0 && until <= 7) {

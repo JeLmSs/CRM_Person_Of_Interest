@@ -1,5 +1,12 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 
+type EmbeddedTag = { name: string } | { name: string }[] | null
+function tagName(t: EmbeddedTag): string | null {
+  if (!t) return null
+  if (Array.isArray(t)) return t[0]?.name ?? null
+  return t.name ?? null
+}
+
 export const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 export const GEMINI_FLASH = 'gemini-2.5-flash'
 
@@ -47,8 +54,8 @@ export function buildContactSystemPrompt(
     c.notes && `Notas del usuario: ${c.notes}`,
   ].filter(Boolean).join('\n')
 
-  const positive = tags.filter(t => t.is_positive).map(t => t.tags?.name).filter(Boolean)
-  const negative = tags.filter(t => !t.is_positive).map(t => t.tags?.name).filter(Boolean)
+  const positive = tags.filter(t => t.is_positive).map(t => tagName(t.tags)).filter((x): x is string => !!x)
+  const negative = tags.filter(t => !t.is_positive).map(t => tagName(t.tags)).filter((x): x is string => !!x)
   const interests = [
     positive.length && `Le interesa: ${positive.join(', ')}`,
     negative.length && `Le desagrada / evitar: ${negative.join(', ')}`,
@@ -171,7 +178,7 @@ export async function loadGeneralCtx(supabase: SupabaseClient, userId: string): 
   const contacts = contactsRes.data || []
   const interactions = interactionsRes.data || []
   const followUps = followUpsRes.data || []
-  const tagRows = (tagsRes.data || []) as { tags: { name: string } | null }[]
+  const tagRows = (tagsRes.data || []) as unknown as { tags: EmbeddedTag }[]
 
   const tierCounts: Record<string, number> = {}
   for (const c of contacts) tierCounts[c.tier] = (tierCounts[c.tier] || 0) + 1
@@ -201,7 +208,10 @@ export async function loadGeneralCtx(supabase: SupabaseClient, userId: string): 
   const topCompanies = Object.entries(companyCount).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k)
 
   const interestCount: Record<string, number> = {}
-  for (const t of tagRows) if (t.tags?.name) interestCount[t.tags.name] = (interestCount[t.tags.name] || 0) + 1
+  for (const t of tagRows) {
+    const name = tagName(t.tags)
+    if (name) interestCount[name] = (interestCount[name] || 0) + 1
+  }
   const topInterests = Object.entries(interestCount).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k)
 
   return {
