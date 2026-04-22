@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Sparkles,
+  Shield,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/supabase/hooks'
@@ -37,11 +38,22 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const { user } = useUser()
   const { theme, toggle: toggleTheme } = useTheme()
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => { if (data?.is_admin) setIsAdmin(true) })
+  }, [user, supabase])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -181,6 +193,43 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </Link>
             )
           })}
+
+          {/* Admin link — only visible for admin users */}
+          {isAdmin && (
+            <>
+              <div className="my-2 border-t border-zinc-800/60" />
+              <Link
+                href="/admin"
+                onClick={() => onClose()}
+                className={`
+                  group relative flex items-center gap-3 px-3 py-2.5 rounded-lg
+                  text-sm font-medium transition-all duration-150
+                  ${
+                    pathname.startsWith('/admin')
+                      ? 'bg-indigo-500/15 text-white'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }
+                `}
+              >
+                {pathname.startsWith('/admin') && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-indigo-500" />
+                )}
+                <Shield
+                  className={`w-5 h-5 shrink-0 transition-colors duration-150 ${
+                    pathname.startsWith('/admin') ? 'text-indigo-400' : 'text-zinc-500 group-hover:text-zinc-300'
+                  }`}
+                />
+                <span className={`whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:opacity-0 lg:w-0 lg:overflow-hidden' : 'opacity-100'}`}>
+                  Admin
+                </span>
+                {collapsed && (
+                  <span className="hidden lg:block absolute left-full ml-3 px-2.5 py-1.5 rounded-md bg-zinc-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 shadow-lg border border-zinc-700/50 z-[60]">
+                    Admin
+                  </span>
+                )}
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Theme toggle */}

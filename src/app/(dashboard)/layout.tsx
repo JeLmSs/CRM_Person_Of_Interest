@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import Sidebar from '@/components/sidebar'
 import TopBar from '@/components/top-bar'
+import PageTracker from '@/components/page-tracker'
 
 export default function DashboardLayout({
   children,
@@ -31,6 +32,7 @@ export default function DashboardLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
+          <PageTracker />
           {children}
         </main>
       </div>
